@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Hallwylska museet! - A-Frame</title>
+    <meta name="description" content="Hallwylska museet billiard room! - A-Frame">
+    <script src="https://aframe.io/releases/0.8.2/aframe.min.js"></script>
+  </head>
+  <body>
+    <a-scene>
+       <a-assets>
+           <a-asset-item id="girl" src="assets/girl/scene.gltf"></a-asset-item>
+       </a-assets>
+
+       <a-assets>
+        <a-asset-item id="room" src="assets/room/scene.gltf"></a-asset-item>
+      </a-assets>
+
+      <a-assets>
+        <a-asset-item id="ghost" src="assets/ghost/ghost.gltf"></a-asset-item>
+    </a-assets>
+
+     <!-- Using the asset management system. 
+    <a-gltf-model  src="#ghost"></a-gltf-model>
+
+        <a-entity cursor position="0 0 5"></a-entity>
+         <a-entity id="pandora"position="0 1.25 -5" radius="1.25" color="#EF2D5E" geometry="primitive: box" 
+              sound="src: url(sounds/from-darkness.ogg); on: click; autoplay: false"></a-entity>
+
+              <a-entity cursor position="0 3 0"></a-entity>
+
+    -->
+
+    <a-sphere position="0 3.1 0" sound="src: url(sounds/from-darkness.ogg); on: click" radius="0.08" color="#EF5DEE"></a-sphere>
+
+    <a-gltf-model  src="#ghost"  rotation="0 180 0" position="0 2 -6" scale="1.5 1.5 1.5" sound="src: url(sounds/Strange_Days-Mike_Koenig-176042049.mp3);on: click; autoplay: true">
+       <a-animation easing="linear" attribute="rotation" dur="10000" to="0 360 0" repeat="indefinite"></a-animation>
+    </a-gltf-model>
+
+        <!-- Using the asset management system. 
+       <a-gltf-model  src="#ghost"></a-gltf-model>
+
+      <a-plane position="0 0 -4"
+	       rotation="0 0 0"
+	       width="4" height="4" color="#7BC8A4"></a-plane>
+      <a-sky color="#0C0C0C"></a-sky>
+              <a-animation easing="linear" attribute="rotation" dur="10000" to="0 360 0" repeat="indefinite"></a-animation>
+
+       -->
+
+       <a-gltf-model  src="#room" position="0 0 0" >
+      </a-gltf-model>
+
+      
+       <a-gltf-model  src="#girl" sound="src: url(sounds/fireplace.ogg); loop: true;  autoplay: true"  position="4 0 -9" scale="0.1 0.1 0.1">
+      </a-gltf-model>
+      
+      <a-gltf-model  src="#girl" position="0 0 -30" scale="0.5 0.5 0.5">
+      </a-gltf-model>
+
+       <a-gltf-model  src="#girl" rotation="0 45 0" position="0 0.9 8" scale="0.15 0.15 0.15" sound="src: url(sounds/8m2stereo_-_08_-_tfe_oddiversion.mp3); autoplay: true" >
+       </a-gltf-model>
+
+       <a-entity camera="active: true" look-controls wasd-controls position="2 4.2 0" data-aframe-default-camera></a-entity>
+
+    </a-scene>
+  </body>
+</html>
