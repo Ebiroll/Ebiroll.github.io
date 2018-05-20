@@ -16,6 +16,9 @@
         <a-mixin id="light"
         material="type: spot; angle: 45; color: #FFF; shader: flat"
         light="color: #DDDDFF; distance: 120; intensity: 2; type: point"></a-mixin>
+
+
+        
     </a-assets>
 
      <!-- Using the asset management system. 
@@ -73,8 +76,8 @@
         <a-animation delay="18000" direction="alternate" easing="ease-in-out-bounce" attribute="position" dur="10000" to="0 3.6 0" repeat="8"></a-animation>
       </a-gltf-model>
 
-      <a-entity animation="property: rotation; to: 360 0 0; dur: 4000; easing: linear; loop: true">
         <a-entity mixin="light" position="2 3.6 0"></a-entity>
+          <a-entity animation="property: rotation; to: 360 0 0; dur: 4000; easing: linear; loop: true">
       </a-entity>
       
         <!-- Using the asset management system. 
@@ -94,6 +97,23 @@
        </a-gltf-model>
 
        <a-entity camera="active: true" look-controls wasd-controls position="2 4.2 0" data-aframe-default-camera></a-entity>
+
+       <a-text
+         id="textPrimitive"
+         position="1 5 -15"
+         color="black"
+         align="left" anchor="right" width="5"
+         value="Credit to\nhttps://sketchfab.com/TheHallwylMuseum\nhttps://sketchfab.com/MacDesigns\nhttp://freemusicarchive.org/music/Various_Artists_at_Oddio_Overplay/Calling_All_Fiends/">
+       </a-text>
+
+       <a-text
+         id="textPrimitive"
+         position="1 10 -15"
+         color="black"     
+         align="left" anchor="right" width="5"
+         value="License and more credits\nhttps://github.com/Ebiroll/Ebiroll.github.io/blob/master/zpook/README.md">
+       </a-text>
+      
 
     </a-scene>
   </body>
