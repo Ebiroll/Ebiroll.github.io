@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+    <title>Floyd</title>
+    <style>
+      .memscripten { padding-right: 0; margin-left: auto; margin-right: auto; display: block; }
+    </style>
+    <script src = "floyd.js">
+      Module['noInitialRun'] = false;
+    </script>
+</head>
+<body>
+  
+    <div class="memscripten">
+        <progress value="0" max="100" id="progress" hidden=1></progress>
+    </div>  
+    <textarea class="text_edit" id="floyd_text">set i=10; print(i);</textarea>
+    <br/>
+    <input type="button" value="Run" onclick="view_text()" />    
+    <br/>  
+    <div id="view_result"></div>    
+</body>
+
+<script>
+
+
+function view_text () {
+        console.log("click\n");
+        // Find html elements.
+        var textArea = document.getElementById('floyd_text');
+
+        //FS.unlink("/example.floyd");
+        FS.createDataFile("/", "example.floyd", textArea, true, true);
+
+        var div = document.getElementById('view_result');
+
+        var text = textArea.value;
+
+        // Could be runtests
+        Module['arguments'].push('run');
+        Module['arguments'].push('example.floyd');
+
+        div.innerHTML =  text;
+        //Module['callMain'](args);
+        Module.print = function (text) {
+          console.log(text);
+        }
+        Module.run();
+        
+        console.log(Object.keys(Module));
+
+        // TODO clear....
+        //Module['arguments'].clear();
+
+        //FS.unlink("/example.floyd");
+
+        console.log("done\n");
+
+  }
+
+
+window.onload = function() {
+  //console.log('window - onload'); // 4th
+
+  //var fileContents = "let i=10 \n\
+  //                   for (i in 0...10) { print(i) }\n";
+
+  //FS.createDataFile("/", "hello.floyd", fileContents, true, true);
+
+  //Module['arguments'].push('run');
+  //Module['arguments'].push('hello.floyd');
+};
+
+
+</script>
+</html>
