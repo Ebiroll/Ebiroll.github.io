@@ -4,19 +4,27 @@
     <meta http-equiv="content-type" content="text/html; charset=UTF-8">
     <title>Floyd</title>
     <style>
-      .memscripten { padding-right: 0; margin-left: auto; margin-right: auto; display: block; }
+      .emscripten { padding-right: 0; margin-left: auto; margin-right: auto; display: block; }
+      textarea {
+        width: 600px;
+        height: 200px;
+      }
     </style>
 </head>
 <body>
     <div class="emscripten">
         <progress value="0" max="100" id="progress" hidden=0></progress>
     </div>  
-    <p id="output" ></p>
-    <textarea class="text_edit" id="floyd_text">set i=10; print(i);print("Hello World");</textarea>
+    <textarea class="text_edit" id="floyd_text">
+for(i in 1...5) { 
+   print(i);
+}
+</textarea>
     <br/>
-    <input type="button" value="Run" onclick="view_text()" />    
+    <input id="rbut" type="button" value="Run" onclick="view_text()" />    
     <br/>  
     <div id="view_result"></div>
+    <p id="output" ></p>
     <script>
       function view_text () {
             console.log("click\n");
@@ -24,25 +32,32 @@
             var textArea = document.getElementById('floyd_text');
             var text = textArea.value;
 
-            FS.createDataFile("/", "example.floyd", text, true, true);
-
             var div = document.getElementById('view_result');
 
 
             // Could be runtests
-            Module['arguments'].push('run');
-            Module['arguments'].push('example.floyd');
+            //Module['arguments'].push('run');
+            //Module['arguments'].push('example.floyd');
+            //Module['arguments'].push('runtests');
 
+            var out = document.getElementById('output');
+          out.innerHTML =  "<br>"; //"Result..<br>";
             div.innerHTML =  text;
 
-            //Module.initRuntime();
-            Module.run();
+            var div = document.getElementById('view_result'); 
+            div.innerHTML =  "Running...";
+
+
+            try {
+               Module.runFloyd(text);
+            }
+            catch(err) {
+              document.getElementById("view_result").innerHTML = "Exception " + err.message;
+            }            
             
             //console.log(Object.keys(Module));
+            //div.innerHTML =  "Done...";
 
-            // TODO clear....
-            //Module['arguments'].clear();
-            //FS.unlink("/example.floyd");
 
             console.log("done\n");
       }
@@ -64,8 +79,14 @@
 					var canvas = document.getElementById('canvas');
 					return canvas;
         })(),
-        'noInitialRun' : true,
-        'ENVIRONMENT'  : 'WEB'
+        onRuntimeInitialized: function() {
+            var but=document.getElementById('rbut')
+            //but["hidden"]="false";
+            var div = document.getElementById('view_result'); 
+            div.innerHTML =  "Loaded...";
+            //console.log('floyd result: ' + Module.runFloyd("print(10)"));
+          },
+        'noInitialRun' : true
       };
 		</script>
     <script src = "floyd.js"></script>
