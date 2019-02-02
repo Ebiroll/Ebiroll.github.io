@@ -14,18 +14,92 @@
 <body>
     <div class="emscripten">
         <progress value="0" max="100" id="progress" hidden=0></progress>
-    </div>  
+    </div>
+    <a href="https://marcusz.github.io/floyd/">Floyd Spec</a>
+    <br/>
+    <select name="ab" id="sel" onchange="changeProgram();">
+      <option value="
+struct rect {
+  int width
+  int height
+}
+func int area(rect r) {
+  return r.width*r.height
+}
+
+let a=rect(3,4)
+print(a)
+let b=update(a,&quot;width&quot;,4);
+print(b)
+print(area(b))
+      ">struct</option>
+      <option value="
+mutable m = [0]
+let a=[1,2,3]
+let b=[4]
+
+let d = a + b
+m = m + d
+
+print(m) 
+      ">array</option> 
+      <option value="
+let a= {&quot;width&quot; : 3, &quot;height&quot; : 4 };
+
+let b=update(a,&quot;width&quot;,4);
+print(a)
+print(b)      
+      ">dictionary</option>
+      <option value="
+let s1=&quot;Hello world &quot;      
+let s2= s1 + to_string(42)
+print s2 
+let s3 = subset(s2,0,4)
+print(s3)
+let ix = find(s3,&quot;lo&quot;)
+print(ix)
+      ">string</option>
+      <option value="
+let [ string : double] a = { &quot;red&quot:0.0,  &quot;blue&quot;:100.2 , &quot;green&quot;:255.3}
+print(a)
+      ">dict double</option>
+
+      <option value="
+let test_json2 = json_value(
+  {
+    &quot;one&quot;: 1,
+    &quot;two&quot;: 2,
+    &quot;five&quot;: { &quot;alpha&quot;: 1000, &quot;beta&quot;: 2000 }
+  })
+print(test_json2)
+print(test_json2[&quot;five&quot;])
+print(get_json_type(test_json2[&quot;five&quot;]))
+print(get_json_type(test_json2[&quot;one&quot;])==json_number)
+
+          ">json_value</option>
+
+    </select>
+
+    <br/>
     <textarea class="text_edit" id="floyd_text">
 for(i in 1...5) { 
    print(i);
 }
 </textarea>
     <br/>
-    <input id="rbut" type="button" value="Run" onclick="view_text()" />    
+    <input id="rbut" type="button" value="Run" disabled onclick="view_text()" />    
     <br/>  
     <div id="view_result"></div>
     <p id="output" ></p>
     <script>
+      function changeProgram() {
+
+        d = document.getElementById("sel").value;
+
+        var textArea = document.getElementById('floyd_text');
+        textArea.value=d;
+      }
+
       function view_text () {
             console.log("click\n");
             // Find html elements.
@@ -81,9 +155,9 @@ for(i in 1...5) {
         })(),
         onRuntimeInitialized: function() {
             var but=document.getElementById('rbut')
-            //but["hidden"]="false";
+            document.getElementById("rbut").disabled = false;
             var div = document.getElementById('view_result'); 
-            div.innerHTML =  "Loaded...";
+            //div.innerHTML =  "Loaded...";
             //console.log('floyd result: ' + Module.runFloyd("print(10)"));
           },
         'noInitialRun' : true
