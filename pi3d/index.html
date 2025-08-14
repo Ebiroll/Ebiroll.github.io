@@ -1,0 +1,833 @@
+<!doctype html>
+<html lang="en-us">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <title>OpenGL ES 2.0 3D Model Viewer - Tutorial & Documentation</title>
+    <style>
+      body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        margin: 0;
+        padding: 0;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: #333;
+      }
+
+      .documentation {
+        max-width: 1200px;
+        margin: 20px auto;
+        padding: 30px;
+        background: white;
+        border-radius: 10px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+      }
+
+      .documentation h1 {
+        color: #764ba2;
+        border-bottom: 3px solid #667eea;
+        padding-bottom: 10px;
+        margin-bottom: 20px;
+      }
+
+      .documentation h2 {
+        color: #667eea;
+        margin-top: 30px;
+        border-left: 4px solid #764ba2;
+        padding-left: 10px;
+      }
+
+      .documentation h3 {
+        color: #555;
+        margin-top: 20px;
+      }
+
+      .code-block {
+        background: #f4f4f4;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        padding: 15px;
+        margin: 15px 0;
+        font-family: 'Courier New', monospace;
+        overflow-x: auto;
+      }
+
+      .info-box {
+        background: #e8f4fd;
+        border-left: 4px solid #2196F3;
+        padding: 15px;
+        margin: 20px 0;
+        border-radius: 5px;
+      }
+
+      .warning-box {
+        background: #fff3cd;
+        border-left: 4px solid #ffc107;
+        padding: 15px;
+        margin: 20px 0;
+        border-radius: 5px;
+      }
+
+      .success-box {
+        background: #d4edda;
+        border-left: 4px solid #28a745;
+        padding: 15px;
+        margin: 20px 0;
+        border-radius: 5px;
+      }
+
+      .pipeline-diagram {
+        background: #f9f9f9;
+        border: 2px solid #ddd;
+        border-radius: 10px;
+        padding: 20px;
+        margin: 20px 0;
+        text-align: center;
+      }
+
+      .pipeline-stage {
+        display: inline-block;
+        background: #667eea;
+        color: white;
+        padding: 10px 20px;
+        margin: 5px;
+        border-radius: 5px;
+        position: relative;
+      }
+
+      .arrow {
+        display: inline-block;
+        margin: 0 10px;
+        color: #667eea;
+        font-size: 20px;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 20px 0;
+      }
+
+      th, td {
+        border: 1px solid #ddd;
+        padding: 12px;
+        text-align: left;
+      }
+
+      th {
+        background: #667eea;
+        color: white;
+      }
+
+      tr:nth-child(even) {
+        background: #f9f9f9;
+      }
+
+      .emscripten { 
+        padding-right: 0; 
+        margin-left: auto; 
+        margin-right: auto; 
+        display: block; 
+      }
+      
+      div.emscripten { 
+        text-align: center; 
+      }
+      
+      div.emscripten_border { 
+        border: 2px solid #764ba2;
+        border-radius: 10px;
+        padding: 10px;
+        margin: 20px auto;
+        background: white;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+      }
+      
+      canvas.emscripten { 
+        border: 0px none; 
+        background-color: black; 
+      }
+
+      .spinner {
+        height: 30px;
+        width: 30px;
+        margin: 0;
+        margin-top: 20px;
+        margin-left: 20px;
+        display: inline-block;
+        vertical-align: top;
+        animation: rotation 0.8s linear infinite;
+        border-left: 5px solid rgb(235, 235, 235);
+        border-right: 5px solid rgb(235, 235, 235);
+        border-bottom: 5px solid rgb(235, 235, 235);
+        border-top: 5px solid rgb(120, 120, 120);
+        border-radius: 100%;
+        background-color: rgb(189, 215, 46);
+      }
+
+      @keyframes rotation {
+        from {transform: rotate(0deg);}
+        to {transform: rotate(360deg);}
+      }
+
+      #status {
+        display: inline-block;
+        vertical-align: top;
+        margin-top: 30px;
+        margin-left: 20px;
+        font-weight: bold;
+        color: white;
+      }
+
+      #progress {
+        height: 20px;
+        width: 300px;
+      }
+
+      #controls {
+        display: inline-block;
+        float: right;
+        vertical-align: top;
+        margin-top: 30px;
+        margin-right: 20px;
+        background: white;
+        padding: 10px;
+        border-radius: 5px;
+      }
+
+      #output {
+        width: 100%;
+        height: 150px;
+        margin: 10px auto;
+        border-left: 0px;
+        border-right: 0px;
+        padding: 10px;
+        display: block;
+        background-color: black;
+        color: #0f0;
+        font-family: 'Courier New', Monaco, monospace;
+        outline: none;
+        border-radius: 5px;
+      }
+
+      .demo-section {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 30px;
+        border-radius: 10px;
+        margin: 30px 0;
+        color: white;
+        text-align: center;
+      }
+
+      .demo-section h2 {
+        color: white;
+        border: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="documentation">
+      <h1>🚀 Pi3D - OpenGL ES 2.0 3D Model Viewer</h1>
+      
+      <div class="info-box">
+        <strong>Pi3D - 3D Viewer for Raspberry Pi and Linux Systems</strong><br>
+        Pi3D is an OpenGL/GLES viewer originally designed to make it possible to view 3D models on a Raspberry Pi 
+        and other GLES/OpenGL Linux systems using the Open Asset Import Library (Assimp). This web version demonstrates 
+        the same technology running in your browser through Emscripten and WebGL!
+      </div>
+
+      <div class="success-box">
+        <strong>🎯 Project Goals:</strong>
+        <ul>
+          <li>Enable 3D model viewing on resource-constrained devices like Raspberry Pi</li>
+          <li>Support multiple 3D file formats through Open Asset Import Library</li>
+          <li>Provide efficient OpenGL ES 2.0 rendering for embedded systems</li>
+          <li>Cross-platform compatibility - from Raspberry Pi to web browsers</li>
+        </ul>
+      </div>
+      
+      <div class="info-box">
+        <strong>Welcome!</strong> This interactive tutorial demonstrates the WebGL version of Pi3D, compiled from C++ using Emscripten. 
+        Learn about the OpenGL ES 2.0 pipeline, shader programming, and how this viewer renders 3D aircraft models in your browser - 
+        the same code that runs on Raspberry Pi hardware!
+      </div>
+
+      <h2>📚 Table of Contents</h2>
+      <ul>
+        <li><a href="#about-pi3d">About Pi3D Project</a></li>
+        <li><a href="#introduction">Introduction to OpenGL ES 2.0</a></li>
+        <li><a href="#core-logic">OpenGL's Core Logic - The 3 Fundamentals</a></li>
+        <li><a href="#pipeline">The Graphics Pipeline</a></li>
+        <li><a href="#shaders">Understanding Shaders</a></li>
+        <li><a href="#program-architecture">Program Architecture</a></li>
+        <li><a href="#controls">Interactive Controls</a></li>
+        <li><a href="#demo">Live Demo</a></li>
+        <li><a href="#troubleshooting">Troubleshooting</a></li>
+      </ul>
+
+      <h2 id="about-pi3d">🥧 About Pi3D Project</h2>
+      <p>
+        <strong>Pi3D</strong> is a 3D viewer specifically designed for Raspberry Pi and other GLES/OpenGL Linux systems. 
+        The project's primary goal is to enable 3D model visualization on resource-constrained embedded devices, 
+        particularly the Raspberry Pi, which has limited GPU capabilities compared to desktop systems.
+      </p>
+
+      <div class="pipeline-diagram">
+        <div class="pipeline-stage">Raspberry Pi / Linux</div>
+        <span class="arrow">→</span>
+        <div class="pipeline-stage">OpenGL ES 2.0</div>
+        <span class="arrow">→</span>
+        <div class="pipeline-stage">Pi3D Viewer</div>
+        <span class="arrow">→</span>
+        <div class="pipeline-stage">3D Models</div>
+      </div>
+
+      <h3>Key Features of Pi3D:</h3>
+      <table>
+        <tr>
+          <th>Feature</th>
+          <th>Description</th>
+          <th>Benefit</th>
+        </tr>
+        <tr>
+          <td><strong>Embedded Optimization</strong></td>
+          <td>Designed for low-power ARM processors</td>
+          <td>Runs smoothly on Raspberry Pi's limited hardware</td>
+        </tr>
+        <tr>
+          <td><strong>OpenGL ES 2.0</strong></td>
+          <td>Uses embedded systems graphics standard</td>
+          <td>Hardware acceleration on mobile GPUs</td>
+        </tr>
+        <tr>
+          <td><strong>Assimp Integration</strong></td>
+          <td>Open Asset Import Library support</td>
+          <td>Loads 40+ 3D file formats</td>
+        </tr>
+        <tr>
+          <td><strong>Cross-Platform</strong></td>
+          <td>C++ codebase with multiple targets</td>
+          <td>Runs on Pi, Linux, and now web browsers</td>
+        </tr>
+      </table>
+
+      <div class="warning-box">
+        <strong>Platform Compatibility:</strong>
+        <ul>
+          <li><strong>Native:</strong> Raspberry Pi (all models), Linux with OpenGL ES support</li>
+          <li><strong>Web:</strong> This version via Emscripten/WebGL in modern browsers</li>
+          <li><strong>Required:</strong> OpenGL ES 2.0 compatible GPU</li>
+        </ul>
+      </div>
+
+      <h2 id="introduction">🎨 Introduction to OpenGL ES 2.0</h2>
+      <p>
+        OpenGL ES (OpenGL for Embedded Systems) 2.0 is a subset of OpenGL designed for embedded devices like smartphones, tablets, and in our case, web browsers through WebGL. This program demonstrates core concepts of 3D graphics rendering.
+      </p>
+
+      <div class="success-box">
+        <strong>Key Features of OpenGL ES 2.0:</strong>
+        <ul>
+          <li>Programmable pipeline with vertex and fragment shaders</li>
+          <li>Hardware-accelerated 3D rendering</li>
+          <li>Cross-platform compatibility through WebGL</li>
+          <li>Efficient rendering for complex 3D models</li>
+        </ul>
+      </div>
+
+      <h3>❓ Is OpenGL Working Entirely in the GPU?</h3>
+      <p>
+        <strong>Not quite!</strong> Only hard image processing and a few other intensive operations run on the GPU. 
+        OpenGL provides features to store images, data, and information in optimized formats. 
+        These optimized data structures are then processed directly by the GPU for maximum performance.
+      </p>
+
+      <div class="warning-box">
+        <strong>Is OpenGL Hardware Dependent?</strong><br>
+        Unfortunately, yes! If the hardware (Graphics Card) doesn't support OpenGL, we can't use it. 
+        Newer OpenGL versions often require newer GPU features. However, don't worry - in practice, 
+        all Graphics Card chips today have an implementation of OpenGL. You can use OpenGL in many 
+        languages and devices, even in Microsoft Windows!
+      </div>
+
+      <h2 id="core-logic">🧠 OpenGL's Core Logic</h2>
+      <p>
+        OpenGL is a graphics library that's very concise and focused. What you see in professional 3D software 
+        is super complex work built <em>on top of</em> OpenGL. At its core, OpenGL's logic revolves around just 
+        three fundamental concepts:
+      </p>
+
+      <div class="pipeline-diagram">
+        <div class="pipeline-stage">1. Primitives</div>
+        <div class="pipeline-stage">2. Buffers</div>
+        <div class="pipeline-stage">3. Rasterization</div>
+      </div>
+
+      <p>
+        Just these 3 concepts? Believe it - OpenGL works entirely around these fundamentals. Let's explore each 
+        concept and see how they combine to create the most advanced 3D graphics (OpenGL also handles 2D graphics - 
+        to OpenGL, 2D is just 3D with all Z-depth at 0!).
+      </p>
+
+      <h3>📍 1. Primitives</h3>
+      <p>OpenGL's primitives are limited to 3 basic types of objects:</p>
+      
+      <table>
+        <tr>
+          <th>Primitive Type</th>
+          <th>Description</th>
+          <th>Usage in Our Viewer</th>
+        </tr>
+        <tr>
+          <td><strong>3D Point</strong></td>
+          <td>A single point in space (x, y, z)<br>Can be used as a particle</td>
+          <td>Vertex positions in the aircraft model</td>
+        </tr>
+        <tr>
+          <td><strong>3D Line</strong></td>
+          <td>Composed of two 3D points<br>Used as vectors or edges</td>
+          <td>Wireframe mode, debug visualization</td>
+        </tr>
+        <tr>
+          <td><strong>3D Triangle</strong></td>
+          <td>Composed of three 3D points<br>The fundamental surface primitive</td>
+          <td>All aircraft surfaces are triangle meshes</td>
+        </tr>
+      </table>
+
+      <div class="info-box">
+        <strong>Note:</strong> Some OpenGL versions support quads (4-sided polygons), but OpenGL ES omits them 
+        for maximum performance. Everything in our aircraft model is rendered as triangles!
+      </div>
+
+      <h3>💾 2. Buffers</h3>
+      <p>
+        Buffers are temporary optimized storage areas. OpenGL works with three types of buffers:
+      </p>
+
+      <div class="code-block">
+<strong>1. Frame Buffers</strong>
+   - Most abstract buffer type
+   - Stores the final rendered image
+   - Can output to screen or another buffer for post-processing
+   - Our viewer renders to the default framebuffer (your screen)
+
+<strong>2. Render Buffers</strong>
+   - Optimized for rendering operations
+   - Often used for depth and stencil testing
+   - Stores per-pixel information during rendering
+
+<strong>3. Buffer Objects (VBOs, IBOs)</strong>
+   - Vertex Buffer Objects store vertex data (positions, normals, textures)
+   - Index Buffer Objects store triangle connectivity
+   - Our program uses these extensively for the aircraft geometry
+      </div>
+
+      <p>
+        In our viewer, the aircraft model's vertices are stored in VBOs, uploaded once to the GPU, 
+        and reused every frame for efficient rendering.
+      </p>
+
+      <h3>🖼️ 3. Rasterization</h3>
+      <p>
+        Rasterization is the process of converting vector graphics (our triangles) into pixels on the screen. 
+        This is where the magic happens - the GPU takes our 3D triangles and determines which pixels they cover, 
+        at what depth, and what color they should be.
+      </p>
+
+      <div class="pipeline-diagram">
+        <div class="pipeline-stage">Triangle Vertices</div>
+        <span class="arrow">→</span>
+        <div class="pipeline-stage">Rasterizer</div>
+        <span class="arrow">→</span>
+        <div class="pipeline-stage">Pixels/Fragments</div>
+        <span class="arrow">→</span>
+        <div class="pipeline-stage">Screen</div>
+      </div>
+
+      <div class="success-box">
+        <strong>How These 3 Concepts Work Together in Our Viewer:</strong>
+        <ol>
+          <li><strong>Primitives:</strong> Aircraft model is decomposed into thousands of triangles</li>
+          <li><strong>Buffers:</strong> Triangle data stored in GPU memory via VBOs</li>
+          <li><strong>Rasterization:</strong> GPU converts triangles to pixels every frame</li>
+        </ol>
+        <p>This happens 60 times per second to create smooth animation!</p>
+      </div>
+
+      <div class="info-box">
+        <strong>📚 Further Reading:</strong><br>
+        For a comprehensive guide to OpenGL ES 2.x, check out the original tutorial series: 
+        <a href="https://www.scribd.com/document/141676402/All-about-OpenGL-ES-2-x-part-1-3" target="_blank">
+          All About OpenGL ES 2.x (Parts 1-3) on Scribd
+        </a>
+      </div>
+
+      <h2 id="pipeline">⚙️ The Graphics Pipeline</h2>
+      <p>
+        Now that we understand the three core concepts (Primitives, Buffers, Rasterization), let's see how 
+        our 3D viewer processes geometry through the complete OpenGL ES 2.0 pipeline:
+      </p>
+
+      <div class="pipeline-diagram">
+        <div class="pipeline-stage">Vertex Data</div>
+        <span class="arrow">→</span>
+        <div class="pipeline-stage">Vertex Shader</div>
+        <span class="arrow">→</span>
+        <div class="pipeline-stage">Primitive Assembly</div>
+        <span class="arrow">→</span>
+        <div class="pipeline-stage">Rasterization</div>
+        <span class="arrow">→</span>
+        <div class="pipeline-stage">Fragment Shader</div>
+        <span class="arrow">→</span>
+        <div class="pipeline-stage">Frame Buffer</div>
+      </div>
+
+      <h3>Pipeline Stages Explained:</h3>
+      <table>
+        <tr>
+          <th>Stage</th>
+          <th>Description</th>
+          <th>In Our Program</th>
+        </tr>
+        <tr>
+          <td><strong>Vertex Data</strong></td>
+          <td>3D model vertices, normals, and texture coordinates</td>
+          <td>Loaded from .mdl or .pkg aircraft model files</td>
+        </tr>
+        <tr>
+          <td><strong>Vertex Shader</strong></td>
+          <td>Transforms vertices from 3D to screen space</td>
+          <td>Applies model, view, and projection matrices</td>
+        </tr>
+        <tr>
+          <td><strong>Primitive Assembly</strong></td>
+          <td>Groups vertices into triangles</td>
+          <td>Creates aircraft surface from triangle mesh</td>
+        </tr>
+        <tr>
+          <td><strong>Rasterization</strong></td>
+          <td>Converts triangles to pixels</td>
+          <td>Hardware-accelerated by WebGL</td>
+        </tr>
+        <tr>
+          <td><strong>Fragment Shader</strong></td>
+          <td>Colors each pixel</td>
+          <td>Applies textures and lighting to aircraft</td>
+        </tr>
+      </table>
+
+      <h2 id="shaders">🔧 Understanding Shaders in This Program</h2>
+      
+      <h3>Vertex Shader</h3>
+      <p>Our vertex shader transforms each vertex of the 3D model:</p>
+      
+      <div class="code-block">
+attribute vec3 position;    // Vertex position in model space
+attribute vec3 normal;       // Vertex normal for lighting
+attribute vec2 vtex;        // Texture coordinates
+
+uniform mat4 model;         // Model transformation matrix
+uniform mat4 view;          // Camera view matrix  
+uniform mat4 projection;    // Perspective projection matrix
+
+varying vec2 texcoord;      // Pass texture coords to fragment shader
+
+void main() {
+    // Transform vertex position through MVP matrices
+    gl_Position = projection * view * model * vec4(position, 1.0);
+    
+    // Flip Y coordinate for texture (common for image formats)
+    texcoord = vec2(vtex.x, 1.0 - vtex.y);
+}
+      </div>
+
+      <div class="info-box">
+        <strong>Matrix Transformations:</strong>
+        <ul>
+          <li><strong>Model Matrix:</strong> Rotates and positions the aircraft in world space</li>
+          <li><strong>View Matrix:</strong> Simulates camera position and orientation</li>
+          <li><strong>Projection Matrix:</strong> Creates 3D perspective effect</li>
+        </ul>
+      </div>
+
+      <h3>Fragment Shader</h3>
+      <p>The fragment shader determines the color of each pixel:</p>
+      
+      <div class="code-block">
+precision highp float;
+varying vec2 texcoord;      // Interpolated texture coordinates
+uniform sampler2D tex;      // Texture sampler
+uniform vec4 colour;        // Optional color tint
+
+void main() {
+    // Sample texture at interpolated coordinates
+    vec2 coord = clamp(texcoord, 0.0, 1.0);
+    gl_FragColor = texture2D(tex, coord);
+    
+    // Optionally apply color tint
+    // gl_FragColor = texture2D(tex, coord) * colour;
+}
+      </div>
+
+      <h2 id="program-architecture">🏗️ Program Architecture</h2>
+      
+      <h3>Key Components:</h3>
+      
+      <div class="code-block">
+1. <strong>Main Rendering Loop (do_frame)</strong>
+   - Polls input events
+   - Updates camera position
+   - Sets transformation matrices
+   - Binds textures and vertex data
+   - Draws the model
+
+2. <strong>Model Loading System</strong>
+   - Loads .mdl and .pkg aircraft files
+   - Parses vertex, normal, and texture data
+   - Creates Vertex Buffer Objects (VBOs)
+
+3. <strong>Camera System</strong>
+   - FPS-style camera controls
+   - Mouse look and WASD movement
+   - Zoom with scroll wheel
+
+4. <strong>Texture Management</strong>
+   - SOIL library for image loading
+   - WebGL texture binding
+   - Automatic mipmap generation
+      </div>
+
+      <h3>Data Flow</h3>
+      <div class="pipeline-diagram">
+        <div class="pipeline-stage">Load Model File</div>
+        <span class="arrow">→</span>
+        <div class="pipeline-stage">Parse Geometry</div>
+        <span class="arrow">→</span>
+        <div class="pipeline-stage">Create VBOs</div>
+        <span class="arrow">→</span>
+        <div class="pipeline-stage">Load Textures</div>
+        <span class="arrow">→</span>
+        <div class="pipeline-stage">Render Frame</div>
+      </div>
+
+      <h2 id="controls">🎮 Interactive Controls</h2>
+      
+      <table>
+        <tr>
+          <th>Control</th>
+          <th>Action</th>
+        </tr>
+        <tr>
+          <td><strong>W, A, S, D</strong></td>
+          <td>Move camera forward, left, backward, right</td>
+        </tr>
+        <tr>
+          <td><strong>Mouse Move</strong></td>
+          <td>Rotate view (look around)</td>
+        </tr>
+        <tr>
+          <td><strong>Mouse Scroll</strong></td>
+          <td>Zoom in/out</td>
+        </tr>
+        <tr>
+          <td><strong>ESC</strong></td>
+          <td>Exit fullscreen / Release pointer lock</td>
+        </tr>
+      </table>
+
+      <div class="warning-box">
+        <strong>Performance Tips:</strong>
+        <ul>
+          <li>The viewer uses hardware acceleration - ensure WebGL is enabled in your browser</li>
+          <li>Complex models may take time to load initially</li>
+          <li>Use Chrome, Firefox, or Edge for best performance</li>
+        </ul>
+      </div>
+
+      <h2>📊 Technical Specifications</h2>
+      
+      <h3>Supported File Formats:</h3>
+      <ul>
+        <li><strong>.mdl</strong> - Single model files</li>
+        <li><strong>.pkg</strong> - Package files containing multiple models</li>
+        <li><strong>Textures:</strong> PNG, JPG (loaded via SOIL library)</li>
+      </ul>
+
+      <h3>OpenGL ES 2.0 Features Used:</h3>
+      <div class="code-block">
+- Vertex Buffer Objects (VBOs) for efficient geometry storage
+- Index Buffer Objects for optimized triangle rendering  
+- Texture mapping with bilinear filtering
+- Matrix transformations (GLM library)
+- Depth testing for proper 3D occlusion
+- Alpha blending for transparency
+      </div>
+
+      <h2 id="demo">🎯 Live Demo - A320 Aircraft Model</h2>
+      <div class="demo-section">
+        <h2>Interactive 3D Viewer</h2>
+        <p>The viewer below is running the compiled C++ OpenGL ES code in your browser via Emscripten/WebGL!</p>
+      </div>
+    </div>
+
+    <!-- Original Emscripten Application -->
+    <div class="spinner" id='spinner'></div>
+    <div class="emscripten" id="status">Downloading...</div>
+
+    <span id='controls'>
+      <span><input type="checkbox" id="resize">Resize canvas</span>
+      <span><input type="checkbox" id="pointerLock" checked>Lock/hide mouse pointer &nbsp;&nbsp;&nbsp;</span>
+      <span><input type="button" value="Fullscreen" onclick="Module.requestFullscreen(document.getElementById('pointerLock').checked, 
+                                                                                document.getElementById('resize').checked)">
+      </span>
+    </span>
+
+    <div class="emscripten">
+      <progress value="0" max="100" id="progress" hidden=1></progress>
+    </div>
+    
+    <div class="emscripten_border">
+      <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
+    </div>
+    
+    <div class="documentation" style="margin-top: 20px;">
+      <h3>🖥️ Console Output</h3>
+      <textarea id="output" rows="8"></textarea>
+      
+      <h2 id="troubleshooting">🔧 Troubleshooting</h2>
+      
+      <div class="warning-box">
+        <strong>Common Issues and Solutions:</strong>
+        <ul>
+          <li><strong>Black screen:</strong> Check if WebGL is enabled in your browser settings</li>
+          <li><strong>Textures not loading:</strong> The fragment shader may need the fix mentioned above - ensure it's using texture2D() instead of outputting solid colors</li>
+          <li><strong>Poor performance:</strong> Try reducing browser window size or closing other tabs</li>
+          <li><strong>Model not appearing:</strong> Wait for full download, check console for errors</li>
+        </ul>
+      </div>
+
+      <h2>🚀 How Emscripten Makes This Possible</h2>
+      <p>
+        The Pi3D viewer was originally written in C++ for Raspberry Pi and Linux systems. Using Emscripten, 
+        we can compile the same codebase to WebAssembly, bringing embedded 3D graphics to the web:
+      </p>
+      
+      <div class="pipeline-diagram">
+        <div class="pipeline-stage">Pi3D C++ Code</div>
+        <span class="arrow">→</span>
+        <div class="pipeline-stage">Emscripten Compiler</div>
+        <span class="arrow">→</span>
+        <div class="pipeline-stage">WebAssembly + JS</div>
+        <span class="arrow">→</span>
+        <div class="pipeline-stage">WebGL Calls</div>
+        <span class="arrow">→</span>
+        <div class="pipeline-stage">GPU Rendering</div>
+      </div>
+
+      <h3>Benefits of This Approach:</h3>
+      <ul>
+        <li>Same codebase runs on Raspberry Pi and in browsers</li>
+        <li>Near-native performance through WebAssembly</li>
+        <li>Reuse existing C++ OpenGL ES code without modification</li>
+        <li>Access to mature C++ libraries (GLM for math, SOIL for textures, Assimp for models)</li>
+        <li>Demonstrates that embedded graphics code can run anywhere</li>
+      </ul>
+
+      <div class="success-box">
+        <strong>From Pi to Browser:</strong> The code running in your browser right now is the same code 
+        that runs on Raspberry Pi hardware - a testament to the portability of OpenGL ES and the power 
+        of modern web technologies!
+      </div>
+
+      <h2>📖 Learning Resources</h2>
+      <ul>
+        <li><a href="https://www.khronos.org/opengles/" target="_blank">OpenGL ES Official Documentation</a></li>
+        <li><a href="https://emscripten.org/" target="_blank">Emscripten Documentation</a></li>
+        <li><a href="https://learnopengl.com/" target="_blank">Learn OpenGL Tutorial</a></li>
+        <li><a href="https://webglfundamentals.org/" target="_blank">WebGL Fundamentals</a></li>
+      </ul>
+
+      <div class="success-box">
+        <strong>🎉 Congratulations!</strong> You now understand the core concepts behind this 3D viewer:
+        <ul>
+          <li>How vertices flow through the graphics pipeline</li>
+          <li>How shaders transform and color 3D geometry</li>
+          <li>How matrices create 3D perspective</li>
+          <li>How Emscripten brings C++ to the web</li>
+        </ul>
+        <p>Try moving around the 3D model above using WASD and mouse controls!</p>
+      </div>
+    </div>
+
+    <script type='text/javascript'>
+      var statusElement = document.getElementById('status');
+      var progressElement = document.getElementById('progress');
+      var spinnerElement = document.getElementById('spinner');
+
+      var Module = {
+        preRun: [],
+        postRun: [],
+        print: (function() {
+          var element = document.getElementById('output');
+          if (element) element.value = ''; // clear browser cache
+          return function(text) {
+            if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
+            console.log(text);
+            if (element) {
+              element.value += text + "\n";
+              element.scrollTop = element.scrollHeight; // focus on bottom
+            }
+          };
+        })(),
+        printErr: function(text) {
+          if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
+          console.error(text);
+        },
+        canvas: (function() {
+          var canvas = document.getElementById('canvas');
+          canvas.addEventListener("webglcontextlost", function(e) { 
+            alert('WebGL context lost. You will need to reload the page.'); 
+            e.preventDefault(); 
+          }, false);
+          return canvas;
+        })(),
+        setStatus: function(text) {
+          if (!Module.setStatus.last) Module.setStatus.last = { time: Date.now(), text: '' };
+          if (text === Module.setStatus.last.text) return;
+          var m = text.match(/([^(]+)\((\d+(\.\d+)?)\/(\d+)\)/);
+          var now = Date.now();
+          if (m && now - Module.setStatus.last.time < 30) return;
+          Module.setStatus.last.time = now;
+          Module.setStatus.last.text = text;
+          if (m) {
+            text = m[1];
+            progressElement.value = parseInt(m[2])*100;
+            progressElement.max = parseInt(m[4])*100;
+            progressElement.hidden = false;
+            spinnerElement.hidden = false;
+          } else {
+            progressElement.value = null;
+            progressElement.max = null;
+            progressElement.hidden = true;
+            if (!text) spinnerElement.style.display = 'none';
+          }
+          statusElement.innerHTML = text;
+        },
+        totalDependencies: 0,
+        monitorRunDependencies: function(left) {
+          this.totalDependencies = Math.max(this.totalDependencies, left);
+          Module.setStatus(left ? 'Preparing... (' + (this.totalDependencies-left) + '/' + this.totalDependencies + ')' : 'All downloads complete.');
+        }
+      };
+      Module.setStatus('Downloading...');
+      window.onerror = function(event) {
+        Module.setStatus('Exception thrown, see JavaScript console');
+        spinnerElement.style.display = 'none';
+        Module.setStatus = function(text) {
+          if (text) Module.printErr('[post-exception status] ' + text);
+        };
+      };
+    </script>
+    <script async type="text/javascript" src="pi3d.js"></script>
+  </body>
+</html>
