@@ -25,13 +25,9 @@ var ENVIRONMENT_IS_WORKER = typeof WorkerGlobalScope != 'undefined';
 var ENVIRONMENT_IS_NODE = typeof process == 'object' && process.versions?.node && process.type != 'renderer';
 var ENVIRONMENT_IS_SHELL = !ENVIRONMENT_IS_WEB && !ENVIRONMENT_IS_NODE && !ENVIRONMENT_IS_WORKER;
 
-if (ENVIRONMENT_IS_NODE) {
-
-}
-
 // --pre-jses are emitted after the Module integration code, so that they can
 // refer to Module (if they choose; they can also define Module)
-// include: /tmp/tmpo69mutnd.js
+// include: /tmp/tmpu3f06ezl.js
 
   Module['expectedDataFileDownloads'] ??= 0;
   Module['expectedDataFileDownloads']++;
@@ -41,7 +37,7 @@ if (ENVIRONMENT_IS_NODE) {
     var isWasmWorker = typeof ENVIRONMENT_IS_WASM_WORKER != 'undefined' && ENVIRONMENT_IS_WASM_WORKER;
     if (isPthread || isWasmWorker) return;
     var isNode = typeof process === 'object' && typeof process.versions === 'object' && typeof process.versions.node === 'string';
-    function loadPackage(metadata) {
+    async function loadPackage(metadata) {
 
       var PACKAGE_PATH = '';
       if (typeof window === 'object') {
@@ -52,152 +48,105 @@ if (ENVIRONMENT_IS_NODE) {
       }
       var PACKAGE_NAME = 'robban_planterar.data';
       var REMOTE_PACKAGE_BASE = 'robban_planterar.data';
-      var REMOTE_PACKAGE_NAME = Module['locateFile'] ? Module['locateFile'](REMOTE_PACKAGE_BASE, '') : REMOTE_PACKAGE_BASE;
-var REMOTE_PACKAGE_SIZE = metadata['remote_package_size'];
+      var REMOTE_PACKAGE_NAME = Module['locateFile']?.(REMOTE_PACKAGE_BASE, '') ?? REMOTE_PACKAGE_BASE;
+      var REMOTE_PACKAGE_SIZE = metadata['remote_package_size'];
 
-      function fetchRemotePackage(packageName, packageSize, callback, errback) {
+      async function fetchRemotePackage(packageName, packageSize) {
         if (isNode) {
-          require('fs').readFile(packageName, (err, contents) => {
-            if (err) {
-              errback(err);
-            } else {
-              callback(contents.buffer);
-            }
-          });
-          return;
+          var fsPromises = require('fs/promises');
+          var contents = await fsPromises.readFile(packageName);
+          return contents.buffer;
         }
         Module['dataFileDownloads'] ??= {};
-        fetch(packageName)
-          .catch((cause) => Promise.reject(new Error(`Network Error: ${packageName}`, {cause}))) // If fetch fails, rewrite the error to include the failing URL & the cause.
-          .then((response) => {
-            if (!response.ok) {
-              return Promise.reject(new Error(`${response.status}: ${response.url}`));
-            }
-
-            if (!response.body && response.arrayBuffer) { // If we're using the polyfill, readers won't be available...
-              return response.arrayBuffer().then(callback);
-            }
-
-            const reader = response.body.getReader();
-            const iterate = () => reader.read().then(handleChunk).catch((cause) => {
-              return Promise.reject(new Error(`Unexpected error while handling : ${response.url} ${cause}`, {cause}));
-            });
-
-            const chunks = [];
-            const headers = response.headers;
-            const total = Number(headers.get('Content-Length') ?? packageSize);
-            let loaded = 0;
-
-            const handleChunk = ({done, value}) => {
-              if (!done) {
-                chunks.push(value);
-                loaded += value.length;
-                Module['dataFileDownloads'][packageName] = {loaded, total};
-
-                let totalLoaded = 0;
-                let totalSize = 0;
-
-                for (const download of Object.values(Module['dataFileDownloads'])) {
-                  totalLoaded += download.loaded;
-                  totalSize += download.total;
-                }
-
-                Module['setStatus']?.(`Downloading data... (${totalLoaded}/${totalSize})`);
-                return iterate();
-              } else {
-                const packageData = new Uint8Array(chunks.map((c) => c.length).reduce((a, b) => a + b, 0));
-                let offset = 0;
-                for (const chunk of chunks) {
-                  packageData.set(chunk, offset);
-                  offset += chunk.length;
-                }
-                callback(packageData.buffer);
-              }
-            };
-
-            Module['setStatus']?.('Downloading data...');
-            return iterate();
-          });
-      };
-
-      function handleError(error) {
-        console.error('package error:', error);
-      };
-
-      var fetchedCallback = null;
-      var fetched = Module['getPreloadedPackage'] ? Module['getPreloadedPackage'](REMOTE_PACKAGE_NAME, REMOTE_PACKAGE_SIZE) : null;
-
-      if (!fetched) fetchRemotePackage(REMOTE_PACKAGE_NAME, REMOTE_PACKAGE_SIZE, (data) => {
-        if (fetchedCallback) {
-          fetchedCallback(data);
-          fetchedCallback = null;
-        } else {
-          fetched = data;
+        try {
+          var response = await fetch(packageName);
+        } catch (e) {
+          throw new Error(`Network Error: ${packageName}`, {e});
         }
-      }, handleError);
+        if (!response.ok) {
+          throw new Error(`${response.status}: ${response.url}`);
+        }
 
-    function runWithFS(Module) {
+        const chunks = [];
+        const headers = response.headers;
+        const total = Number(headers.get('Content-Length') ?? packageSize);
+        let loaded = 0;
+
+        Module['setStatus']?.('Downloading data...');
+        const reader = response.body.getReader();
+
+        while (1) {
+          var {done, value} = await reader.read();
+          if (done) break;
+          chunks.push(value);
+          loaded += value.length;
+          Module['dataFileDownloads'][packageName] = {loaded, total};
+
+          let totalLoaded = 0;
+          let totalSize = 0;
+
+          for (const download of Object.values(Module['dataFileDownloads'])) {
+            totalLoaded += download.loaded;
+            totalSize += download.total;
+          }
+
+          Module['setStatus']?.(`Downloading data... (${totalLoaded}/${totalSize})`);
+        }
+
+        const packageData = new Uint8Array(chunks.map((c) => c.length).reduce((a, b) => a + b, 0));
+        let offset = 0;
+        for (const chunk of chunks) {
+          packageData.set(chunk, offset);
+          offset += chunk.length;
+        }
+        return packageData.buffer;
+      }
+
+      var fetchPromise;
+      var fetched = Module['getPreloadedPackage']?.(REMOTE_PACKAGE_NAME, REMOTE_PACKAGE_SIZE);
+
+      if (!fetched) {
+        // Note that we don't use await here because we want to execute the
+        // the rest of this function immediately.
+        fetchPromise = fetchRemotePackage(REMOTE_PACKAGE_NAME, REMOTE_PACKAGE_SIZE);
+      }
+
+    async function runWithFS(Module) {
 
       function assert(check, msg) {
-        if (!check) throw msg + new Error().stack;
+        if (!check) throw new Error(msg);
+      }
+Module['FS_createPath']("/", "souds", true, true);
+
+      for (var file of metadata['files']) {
+        var name = file['filename']
+        Module['addRunDependency'](`fp ${name}`);
       }
 
-      /** @constructor */
-      function DataRequest(start, end, audio) {
-        this.start = start;
-        this.end = end;
-        this.audio = audio;
-      }
-      DataRequest.prototype = {
-        requests: {},
-        open: function(mode, name) {
-          this.name = name;
-          this.requests[name] = this;
-          Module['addRunDependency'](`fp ${this.name}`);
-        },
-        send: function() {},
-        onload: function() {
-          var byteArray = this.byteArray.subarray(this.start, this.end);
-          this.finish(byteArray);
-        },
-        finish: function(byteArray) {
-          var that = this;
-          // canOwn this data in the filesystem, it is a slide into the heap that will never change
-          Module['FS_createDataFile'](this.name, null, byteArray, true, true, true);
-          Module['removeRunDependency'](`fp ${that.name}`);
-          this.requests[this.name] = null;
-        }
-      };
-
-      var files = metadata['files'];
-      for (var i = 0; i < files.length; ++i) {
-        new DataRequest(files[i]['start'], files[i]['end'], files[i]['audio'] || 0).open('GET', files[i]['filename']);
-      }
-
-      function processPackageData(arrayBuffer) {
+      async function processPackageData(arrayBuffer) {
         assert(arrayBuffer, 'Loading data file failed.');
         assert(arrayBuffer.constructor.name === ArrayBuffer.name, 'bad input to processPackageData');
         var byteArray = new Uint8Array(arrayBuffer);
         var curr;
         // Reuse the bytearray from the XHR as the source for file reads.
-          DataRequest.prototype.byteArray = byteArray;
-          var files = metadata['files'];
-          for (var i = 0; i < files.length; ++i) {
-            DataRequest.prototype.requests[files[i].filename].onload();
-          }          Module['removeRunDependency']('datafile_robban_planterar.data');
-
-      };
+          for (var file of metadata['files']) {
+            var name = file['filename'];
+            var data = byteArray.subarray(file['start'], file['end']);
+            // canOwn this data in the filesystem, it is a slice into the heap that will never change
+          Module['FS_createDataFile'](name, null, data, true, true, true);
+          Module['removeRunDependency'](`fp ${name}`);
+          }
+          Module['removeRunDependency']('datafile_robban_planterar.data');
+      }
       Module['addRunDependency']('datafile_robban_planterar.data');
 
       Module['preloadResults'] ??= {};
 
       Module['preloadResults'][PACKAGE_NAME] = {fromCache: false};
-      if (fetched) {
-        processPackageData(fetched);
-        fetched = null;
-      } else {
-        fetchedCallback = processPackageData;
+      if (!fetched) {
+        fetched = await fetchPromise;
       }
+      processPackageData(fetched);
 
     }
     if (Module['calledRun']) {
@@ -207,25 +156,25 @@ var REMOTE_PACKAGE_SIZE = metadata['remote_package_size'];
     }
 
     }
-    loadPackage({"files": [{"filename": "/robban.png", "start": 0, "end": 845280}], "remote_package_size": 845280});
+    loadPackage({"files": [{"filename": "/robban.png", "start": 0, "end": 845280}, {"filename": "/souds/axe-cut-1.wav", "start": 845280, "end": 1017300}, {"filename": "/souds/shoot.wav", "start": 1017300, "end": 1326044}], "remote_package_size": 1326044});
 
   })();
 
-// end include: /tmp/tmpo69mutnd.js
-// include: /tmp/tmp9kots5e5.js
+// end include: /tmp/tmpu3f06ezl.js
+// include: /tmp/tmpk8x3a8w4.js
 
     // All the pre-js content up to here must remain later on, we need to run
     // it.
     if ((typeof ENVIRONMENT_IS_WASM_WORKER != 'undefined' && ENVIRONMENT_IS_WASM_WORKER) || (typeof ENVIRONMENT_IS_PTHREAD != 'undefined' && ENVIRONMENT_IS_PTHREAD) || (typeof ENVIRONMENT_IS_AUDIO_WORKLET != 'undefined' && ENVIRONMENT_IS_AUDIO_WORKLET)) Module['preRun'] = [];
     var necessaryPreJSTasks = Module['preRun'].slice();
-  // end include: /tmp/tmp9kots5e5.js
-// include: /tmp/tmpi9jczcke.js
+  // end include: /tmp/tmpk8x3a8w4.js
+// include: /tmp/tmpp_6jauda.js
 
     if (!Module['preRun']) throw 'Module.preRun should exist because file support used it; did a pre-js delete it?';
     necessaryPreJSTasks.forEach((task) => {
       if (Module['preRun'].indexOf(task) < 0) throw 'All preRun tasks that exist before user pre-js code should remain after; did you replace Module or modify Module.preRun?';
     });
-  // end include: /tmp/tmpi9jczcke.js
+  // end include: /tmp/tmpp_6jauda.js
 
 
 var arguments_ = [];
@@ -264,7 +213,6 @@ if (ENVIRONMENT_IS_NODE) {
   var nodeVersion = process.versions.node;
   var numericVersion = nodeVersion.split('.').slice(0, 3);
   numericVersion = (numericVersion[0] * 10000) + (numericVersion[1] * 100) + (numericVersion[2].split('-')[0] * 1);
-  var minVersion = 160000;
   if (numericVersion < 160000) {
     throw new Error('This emscripten-generated code requires node v16.0.0 (detected v' + nodeVersion + ')');
   }
@@ -272,7 +220,6 @@ if (ENVIRONMENT_IS_NODE) {
   // These modules will usually be used on Node.js. Load them eagerly to avoid
   // the complexity of lazy-loading.
   var fs = require('fs');
-  var nodePath = require('path');
 
   scriptDirectory = __dirname + '/';
 
@@ -415,8 +362,6 @@ if (typeof WebAssembly != 'object') {
 
 // Wasm globals
 
-var wasmMemory;
-
 //========================================
 // Runtime essentials
 //========================================
@@ -444,41 +389,13 @@ function assert(condition, text) {
 // We used to include malloc/free by default in the past. Show a helpful error in
 // builds with assertions.
 
-// Memory management
-
-var HEAP,
-/** @type {!Int8Array} */
-  HEAP8,
-/** @type {!Uint8Array} */
-  HEAPU8,
-/** @type {!Int16Array} */
-  HEAP16,
-/** @type {!Uint16Array} */
-  HEAPU16,
-/** @type {!Int32Array} */
-  HEAP32,
-/** @type {!Uint32Array} */
-  HEAPU32,
-/** @type {!Float32Array} */
-  HEAPF32,
-/* BigInt64Array type is not correctly defined in closure
-/** not-@type {!BigInt64Array} */
-  HEAP64,
-/* BigUint64Array type is not correctly defined in closure
-/** not-t@type {!BigUint64Array} */
-  HEAPU64,
-/** @type {!Float64Array} */
-  HEAPF64;
-
-var runtimeInitialized = false;
-
 /**
  * Indicates whether filename is delivered via file protocol (as opposed to http/https)
  * @noinline
  */
 var isFileURI = (filename) => filename.startsWith('file://');
 
-// include: runtime_shared.js
+// include: runtime_common.js
 // include: runtime_stack_check.js
 // Initializes the stack cookie. Called at the startup of main and at the startup of each thread in pthreads mode.
 function writeStackCookie() {
@@ -535,7 +452,7 @@ function dbg(...args) {
   var h16 = new Int16Array(1);
   var h8 = new Int8Array(h16.buffer);
   h16[0] = 0x6373;
-  if (h8[0] !== 0x73 || h8[1] !== 0x63) throw 'Runtime error: expected the system to be little-endian! (Run with -sSUPPORT_BIG_ENDIAN to bypass)';
+  if (h8[0] !== 0x73 || h8[1] !== 0x63) abort('Runtime error: expected the system to be little-endian! (Run with -sSUPPORT_BIG_ENDIAN to bypass)');
 })();
 
 function consumedModuleProp(prop) {
@@ -550,6 +467,11 @@ function consumedModuleProp(prop) {
   }
 }
 
+function makeInvalidEarlyAccess(name) {
+  return () => assert(false, `call to '${name}' via reference taken before Wasm module initialization`);
+
+}
+
 function ignoredModuleProp(prop) {
   if (Object.getOwnPropertyDescriptor(Module, prop)) {
     abort(`\`Module.${prop}\` was supplied but \`${prop}\` not included in INCOMING_MODULE_JS_API`);
@@ -561,6 +483,7 @@ function isExportedByForceFilesystem(name) {
   return name === 'FS_createPath' ||
          name === 'FS_createDataFile' ||
          name === 'FS_createPreloadedFile' ||
+         name === 'FS_preloadFile' ||
          name === 'FS_unlink' ||
          name === 'addRunDependency' ||
          // The old FS has some functionality that WasmFS lacks.
@@ -570,9 +493,12 @@ function isExportedByForceFilesystem(name) {
 }
 
 /**
- * Intercept access to a global symbol.  This enables us to give informative
- * warnings/errors when folks attempt to use symbols they did not include in
- * their build, or no symbols that no longer exist.
+ * Intercept access to a symbols in the global symbol.  This enables us to give
+ * informative warnings/errors when folks attempt to use symbols they did not
+ * include in their build, or no symbols that no longer exist.
+ *
+ * We don't define this in MODULARIZE mode since in that mode emscripten symbols
+ * are never placed in the global scope.
  */
 function hookGlobalSymbolAccess(sym, func) {
   if (typeof globalThis != 'undefined' && !Object.getOwnPropertyDescriptor(globalThis, sym)) {
@@ -588,7 +514,7 @@ function hookGlobalSymbolAccess(sym, func) {
 
 function missingGlobal(sym, msg) {
   hookGlobalSymbolAccess(sym, () => {
-    warnOnce(`\`${sym}\` is not longer defined by emscripten. ${msg}`);
+    warnOnce(`\`${sym}\` is no longer defined by emscripten. ${msg}`);
   });
 }
 
@@ -635,25 +561,57 @@ function unexportedRuntimeSymbol(sym) {
 }
 
 // end include: runtime_debug.js
-// include: memoryprofiler.js
-// end include: memoryprofiler.js
+// Memory management
+
+var wasmMemory;
+
+var
+/** @type {!Int8Array} */
+  HEAP8,
+/** @type {!Uint8Array} */
+  HEAPU8,
+/** @type {!Int16Array} */
+  HEAP16,
+/** @type {!Uint16Array} */
+  HEAPU16,
+/** @type {!Int32Array} */
+  HEAP32,
+/** @type {!Uint32Array} */
+  HEAPU32,
+/** @type {!Float32Array} */
+  HEAPF32,
+/** @type {!Float64Array} */
+  HEAPF64;
+
+// BigInt64Array type is not correctly defined in closure
+var
+/** not-@type {!BigInt64Array} */
+  HEAP64,
+/* BigUint64Array type is not correctly defined in closure
+/** not-@type {!BigUint64Array} */
+  HEAPU64;
+
+var runtimeInitialized = false;
+
 
 
 function updateMemoryViews() {
   var b = wasmMemory.buffer;
   HEAP8 = new Int8Array(b);
-  HEAP16 = new Int16Array(b);
-  HEAPU8 = new Uint8Array(b);
-  HEAPU16 = new Uint16Array(b);
-  HEAP32 = new Int32Array(b);
-  HEAPU32 = new Uint32Array(b);
-  HEAPF32 = new Float32Array(b);
+  Module['HEAP16'] = HEAP16 = new Int16Array(b);
+  Module['HEAPU8'] = HEAPU8 = new Uint8Array(b);
+  Module['HEAPU16'] = HEAPU16 = new Uint16Array(b);
+  Module['HEAP32'] = HEAP32 = new Int32Array(b);
+  Module['HEAPU32'] = HEAPU32 = new Uint32Array(b);
+  Module['HEAPF32'] = HEAPF32 = new Float32Array(b);
   HEAPF64 = new Float64Array(b);
   HEAP64 = new BigInt64Array(b);
   HEAPU64 = new BigUint64Array(b);
 }
 
-// end include: runtime_shared.js
+// include: memoryprofiler.js
+// end include: memoryprofiler.js
+// end include: runtime_common.js
 assert(typeof Int32Array != 'undefined' && typeof Float64Array !== 'undefined' && Int32Array.prototype.subarray != undefined && Int32Array.prototype.set != undefined,
        'JS engine does not provide full typed array support');
 
@@ -708,84 +666,6 @@ function postRun() {
   // Begin ATPOSTRUNS hooks
   callRuntimeCallbacks(onPostRuns);
   // End ATPOSTRUNS hooks
-}
-
-// A counter of dependencies for calling run(). If we need to
-// do asynchronous work before running, increment this and
-// decrement it. Incrementing must happen in a place like
-// Module.preRun (used by emcc to add file preloading).
-// Note that you can add dependencies in preRun, even though
-// it happens right before run - run will be postponed until
-// the dependencies are met.
-var runDependencies = 0;
-var dependenciesFulfilled = null; // overridden to take different actions when all run dependencies are fulfilled
-var runDependencyTracking = {};
-var runDependencyWatcher = null;
-
-function getUniqueRunDependency(id) {
-  var orig = id;
-  while (1) {
-    if (!runDependencyTracking[id]) return id;
-    id = orig + Math.random();
-  }
-}
-
-function addRunDependency(id) {
-  runDependencies++;
-
-  Module['monitorRunDependencies']?.(runDependencies);
-
-  if (id) {
-    assert(!runDependencyTracking[id]);
-    runDependencyTracking[id] = 1;
-    if (runDependencyWatcher === null && typeof setInterval != 'undefined') {
-      // Check for missing dependencies every few seconds
-      runDependencyWatcher = setInterval(() => {
-        if (ABORT) {
-          clearInterval(runDependencyWatcher);
-          runDependencyWatcher = null;
-          return;
-        }
-        var shown = false;
-        for (var dep in runDependencyTracking) {
-          if (!shown) {
-            shown = true;
-            err('still waiting on run dependencies:');
-          }
-          err(`dependency: ${dep}`);
-        }
-        if (shown) {
-          err('(end of list)');
-        }
-      }, 10000);
-    }
-  } else {
-    err('warning: run dependency added without ID');
-  }
-}
-
-function removeRunDependency(id) {
-  runDependencies--;
-
-  Module['monitorRunDependencies']?.(runDependencies);
-
-  if (id) {
-    assert(runDependencyTracking[id]);
-    delete runDependencyTracking[id];
-  } else {
-    err('warning: run dependency removed without ID');
-  }
-  if (runDependencies == 0) {
-    if (runDependencyWatcher !== null) {
-      clearInterval(runDependencyWatcher);
-      runDependencyWatcher = null;
-    }
-    if (dependenciesFulfilled) {
-      var callback = dependenciesFulfilled;
-      dependenciesFulfilled = null;
-      callback(); // can add another dependenciesFulfilled
-    }
-  }
 }
 
 /** @param {string|number=} what */
@@ -849,6 +729,8 @@ function getBinarySync(file) {
   if (readBinary) {
     return readBinary(file);
   }
+  // Throwing a plain string here, even though it not normally adviables since
+  // this gets turning into an `abort` in instantiateArrayBuffer.
   throw 'both async and sync fetching of the wasm failed';
 }
 
@@ -877,15 +759,15 @@ async function instantiateArrayBuffer(binaryFile, imports) {
     err(`failed to asynchronously prepare wasm: ${reason}`);
 
     // Warn on some common problems.
-    if (isFileURI(wasmBinaryFile)) {
-      err(`warning: Loading from a file URI (${wasmBinaryFile}) is not supported in most browsers. See https://emscripten.org/docs/getting_started/FAQ.html#how-do-i-run-a-local-webserver-for-testing-why-does-my-program-stall-in-downloading-or-preparing`);
+    if (isFileURI(binaryFile)) {
+      err(`warning: Loading from a file URI (${binaryFile}) is not supported in most browsers. See https://emscripten.org/docs/getting_started/FAQ.html#how-do-i-run-a-local-webserver-for-testing-why-does-my-program-stall-in-downloading-or-preparing`);
     }
     abort(reason);
   }
 }
 
 async function instantiateAsync(binary, binaryFile, imports) {
-  if (!binary && typeof WebAssembly.instantiateStreaming == 'function'
+  if (!binary
       // Don't use streaming for file:// delivered objects in a webview, fetch them synchronously.
       && !isFileURI(binaryFile)
       // Avoid instantiateStreaming() on Node.js environment for now, as while
@@ -942,10 +824,10 @@ async function createWasm() {
     assert(wasmMemory, 'memory not found in wasm exports');
     updateMemoryViews();
 
+    assignWasmExports(wasmExports);
     removeRunDependency('wasm-instantiate');
     return wasmExports;
   }
-  // wait for the pthread pool (if any)
   addRunDependency('wasm-instantiate');
 
   // Prefer streaming instantiation if available.
@@ -985,9 +867,9 @@ async function createWasm() {
   }
 
   wasmBinaryFile ??= findWasmBinary();
-    var result = await instantiateAsync(wasmBinary, wasmBinaryFile, info);
-    var exports = receiveInstantiationResult(result);
-    return exports;
+  var result = await instantiateAsync(wasmBinary, wasmBinaryFile, info);
+  var exports = receiveInstantiationResult(result);
+  return exports;
 }
 
 // end include: preamble.js
@@ -1015,10 +897,77 @@ async function createWasm() {
   var onPreRuns = [];
   var addOnPreRun = (cb) => onPreRuns.push(cb);
 
+  var runDependencies = 0;
+  
+  
+  var dependenciesFulfilled = null;
+  
+  var runDependencyTracking = {
+  };
+  
+  var runDependencyWatcher = null;
+  var removeRunDependency = (id) => {
+      runDependencies--;
+  
+      Module['monitorRunDependencies']?.(runDependencies);
+  
+      assert(id, 'removeRunDependency requires an ID');
+      assert(runDependencyTracking[id]);
+      delete runDependencyTracking[id];
+      if (runDependencies == 0) {
+        if (runDependencyWatcher !== null) {
+          clearInterval(runDependencyWatcher);
+          runDependencyWatcher = null;
+        }
+        if (dependenciesFulfilled) {
+          var callback = dependenciesFulfilled;
+          dependenciesFulfilled = null;
+          callback(); // can add another dependenciesFulfilled
+        }
+      }
+    };
+  
+  
+  var addRunDependency = (id) => {
+      runDependencies++;
+  
+      Module['monitorRunDependencies']?.(runDependencies);
+  
+      assert(id, 'addRunDependency requires an ID')
+      assert(!runDependencyTracking[id]);
+      runDependencyTracking[id] = 1;
+      if (runDependencyWatcher === null && typeof setInterval != 'undefined') {
+        // Check for missing dependencies every few seconds
+        runDependencyWatcher = setInterval(() => {
+          if (ABORT) {
+            clearInterval(runDependencyWatcher);
+            runDependencyWatcher = null;
+            return;
+          }
+          var shown = false;
+          for (var dep in runDependencyTracking) {
+            if (!shown) {
+              shown = true;
+              err('still waiting on run dependencies:');
+            }
+            err(`dependency: ${dep}`);
+          }
+          if (shown) {
+            err('(end of list)');
+          }
+        }, 10000);
+        // Prevent this timer from keeping the runtime alive if nothing
+        // else is.
+        runDependencyWatcher.unref?.()
+      }
+    };
 
+
+  var dynCalls = {
+  };
   var dynCallLegacy = (sig, ptr, args) => {
       sig = sig.replace(/p/g, 'i')
-      assert(('dynCall_' + sig) in Module, `bad function pointer type - dynCall function not found for sig '${sig}'`);
+      assert(sig in dynCalls, `bad function pointer type - sig is not in dynCalls: '${sig}'`);
       if (args?.length) {
         // j (64-bit integer) is fine, and is implemented as a BigInt. Without
         // legalization, the number of parameters should match (j is not expanded
@@ -1027,7 +976,7 @@ async function createWasm() {
       } else {
         assert(sig.length == 1);
       }
-      var f = Module['dynCall_' + sig];
+      var f = dynCalls[sig];
       return f(ptr, ...args);
     };
   var dynCall = (sig, ptr, args = [], promising = false) => {
@@ -1065,10 +1014,11 @@ async function createWasm() {
 
   var ptrToString = (ptr) => {
       assert(typeof ptr === 'number');
-      // With CAN_ADDRESS_2GB or MEMORY64, pointers are already unsigned.
+      // Convert to 32-bit unsigned value
       ptr >>>= 0;
       return '0x' + ptr.toString(16).padStart(8, '0');
     };
+
 
   
     /**
@@ -1104,7 +1054,22 @@ async function createWasm() {
       }
     };
 
+  var PeerNetworkState = {
+  };
+  
   var UTF8Decoder = typeof TextDecoder != 'undefined' ? new TextDecoder() : undefined;
+  
+  var findStringEnd = (heapOrArray, idx, maxBytesToRead, ignoreNul) => {
+      var maxIdx = idx + maxBytesToRead;
+      if (ignoreNul) return maxIdx;
+      // TextDecoder needs to know the byte length in advance, it doesn't stop on
+      // null terminator by itself.
+      // As a tiny code save trick, compare idx against maxIdx using a negation,
+      // so that maxBytesToRead=undefined/NaN means Infinity.
+      while (heapOrArray[idx] && !(idx >= maxIdx)) ++idx;
+      return idx;
+    };
+  
   
     /**
      * Given a pointer 'idx' to a null-terminated UTF8-encoded string in the given
@@ -1113,25 +1078,18 @@ async function createWasm() {
      * heapOrArray is either a regular array, or a JavaScript typed array view.
      * @param {number=} idx
      * @param {number=} maxBytesToRead
+     * @param {boolean=} ignoreNul - If true, the function will not stop on a NUL character.
      * @return {string}
      */
-  var UTF8ArrayToString = (heapOrArray, idx = 0, maxBytesToRead = NaN) => {
-      var endIdx = idx + maxBytesToRead;
-      var endPtr = idx;
-      // TextDecoder needs to know the byte length in advance, it doesn't stop on
-      // null terminator by itself.  Also, use the length info to avoid running tiny
-      // strings through TextDecoder, since .subarray() allocates garbage.
-      // (As a tiny code save trick, compare endPtr against endIdx using a negation,
-      // so that undefined/NaN means Infinity)
-      while (heapOrArray[endPtr] && !(endPtr >= endIdx)) ++endPtr;
+  var UTF8ArrayToString = (heapOrArray, idx = 0, maxBytesToRead, ignoreNul) => {
+  
+      var endPtr = findStringEnd(heapOrArray, idx, maxBytesToRead, ignoreNul);
   
       // When using conditional TextDecoder, skip it for short strings as the overhead of the native call is not worth it.
       if (endPtr - idx > 16 && heapOrArray.buffer && UTF8Decoder) {
         return UTF8Decoder.decode(heapOrArray.subarray(idx, endPtr));
       }
       var str = '';
-      // If building with TextDecoder, we have already computed the string length
-      // above, so test loop end condition against that
       while (idx < endPtr) {
         // For UTF8 byte structure, see:
         // http://en.wikipedia.org/wiki/UTF-8#Description
@@ -1168,16 +1126,229 @@ async function createWasm() {
      *   maximum number of bytes to read. You can omit this parameter to scan the
      *   string until the first 0 byte. If maxBytesToRead is passed, and the string
      *   at [ptr, ptr+maxBytesToReadr[ contains a null byte in the middle, then the
-     *   string will cut short at that byte index (i.e. maxBytesToRead will not
-     *   produce a string of exact length [ptr, ptr+maxBytesToRead[) N.B. mixing
-     *   frequent uses of UTF8ToString() with and without maxBytesToRead may throw
-     *   JS JIT optimizations off, so it is worth to consider consistently using one
+     *   string will cut short at that byte index.
+     * @param {boolean=} ignoreNul - If true, the function will not stop on a NUL character.
      * @return {string}
      */
-  var UTF8ToString = (ptr, maxBytesToRead) => {
+  var UTF8ToString = (ptr, maxBytesToRead, ignoreNul) => {
       assert(typeof ptr == 'number', `UTF8ToString expects a number (got ${typeof ptr})`);
-      return ptr ? UTF8ArrayToString(HEAPU8, ptr, maxBytesToRead) : '';
+      return ptr ? UTF8ArrayToString(HEAPU8, ptr, maxBytesToRead, ignoreNul) : '';
     };
+  function _JS_BroadcastMessage(messagePtr) {
+          var message = UTF8ToString(messagePtr);
+          var messageObj = JSON.parse(message);
+          
+          // Only log non-FULL_GAME_STATE messages to reduce spam
+          if (messageObj.type !== 'FULL_GAME_STATE') {
+              console.log('[PeerNetwork] Broadcasting:', messageObj.type);
+          }
+  
+          for (var peerId in PeerNetworkState.connections) {
+              if (PeerNetworkState.connections.hasOwnProperty(peerId)) {
+                  try {
+                      PeerNetworkState.connections[peerId].send(messageObj);
+                  } catch (e) {
+                      console.error('[PeerNetwork] Error sending to', peerId, ':', e);
+                  }
+              }
+          }
+      }
+
+  function _JS_CreateRoom() {
+          console.log('[PeerNetwork] JS_CreateRoom called');
+          PeerNetworkState.isHost = true;
+          // Room is automatically created when peer initializes
+          // Just return success
+          return 1;
+      }
+
+  function _JS_DisconnectPeer() {
+          for (var peerId in PeerNetworkState.connections) {
+              if (PeerNetworkState.connections.hasOwnProperty(peerId)) {
+                  PeerNetworkState.connections[peerId].close();
+              }
+          }
+          PeerNetworkState.connections = {};
+  
+          if (PeerNetworkState.peer) {
+              PeerNetworkState.peer.destroy();
+              PeerNetworkState.peer = null;
+          }
+      }
+
+  function _JS_GetRoomId(buffer, bufferSize) {
+          var roomId = PeerNetworkState.roomId;
+          if (roomId) {
+              stringToUTF8(roomId, buffer, bufferSize);
+              return 1;
+          }
+          return 0;
+      }
+
+  function _JS_InitPeerNetwork() {
+          console.log('[PeerNetwork] JS_InitPeerNetwork called');
+  
+          if (typeof Peer === 'undefined') {
+              console.error('[PeerNetwork] PeerJS not loaded! Include peerjs library in HTML.');
+              return 0;
+          }
+  
+          console.log('[PeerNetwork] Initializing...');
+  
+          // Create peer with public PeerJS cloud server
+          PeerNetworkState.peer = new Peer({
+              config: {
+                  iceServers: [
+                      { urls: 'stun:stun.l.google.com:19302' },
+                      { urls: 'stun:stun1.l.google.com:19302' }
+                  ]
+              }
+          });
+  
+          PeerNetworkState.peer.on('open', function(id) {
+              console.log('[PeerNetwork] Peer ID:', id);
+              PeerNetworkState.roomId = id;
+  
+              // Notify C++ code that we're ready
+              if (Module._OnPeerReady) {
+                  var idPtr = Module.allocateUTF8(id);
+                  Module._OnPeerReady(idPtr);
+                  Module._free(idPtr);
+              }
+              if(window.updateRoomId) {
+                  window.updateRoomId(id);
+              }
+          });
+  
+          PeerNetworkState.peer.on('connection', function(conn) {
+              console.log('[PeerNetwork] Incoming connection from:', conn.peer);
+  
+              // Setup connection handlers inline
+              conn.on('open', function() {
+                  console.log('[PeerNetwork] Connection opened with:', conn.peer);
+                  PeerNetworkState.connections[conn.peer] = conn;
+  
+                  // Notify C++ code
+                  if (Module._OnPlayerJoined) {
+                      var peerIdPtr = Module.allocateUTF8(conn.peer);
+                      Module._OnPlayerJoined(peerIdPtr);
+                      Module._free(peerIdPtr);
+                  }
+              });
+  
+              conn.on('data', function(data) {
+                  console.log('[PeerNetwork] Received:', data);
+  
+                  // Notify C++ code with message
+                  if (Module._OnNetworkMessage) {
+                      var dataStr = JSON.stringify(data);
+                      var dataPtr = Module.allocateUTF8(dataStr);
+                      Module._OnNetworkMessage(dataPtr);
+                      Module._free(dataPtr);
+                  }
+              });
+  
+              conn.on('close', function() {
+                  console.log('[PeerNetwork] Connection closed with:', conn.peer);
+                  delete PeerNetworkState.connections[conn.peer];
+  
+                  // Notify C++ code
+                  if (Module._OnPlayerLeft) {
+                      var peerIdPtr = Module.allocateUTF8(conn.peer);
+                      Module._OnPlayerLeft(peerIdPtr);
+                      Module._free(peerIdPtr);
+                  }
+              });
+  
+              conn.on('error', function(err) {
+                  console.error('[PeerNetwork] Connection error:', err);
+              });
+          });
+  
+          PeerNetworkState.peer.on('error', function(err) {
+              console.error('[PeerNetwork] Error:', err);
+          });
+  
+          return 1;
+      }
+
+  
+  function _JS_JoinRoom(roomIdPtr) {
+          var roomId = UTF8ToString(roomIdPtr);
+          console.log('[PeerNetwork] Connecting to:', roomId);
+  
+          if (!PeerNetworkState.peer) {
+              console.error('[PeerNetwork] Peer not initialized!');
+              return 0;
+          }
+  
+          var conn = PeerNetworkState.peer.connect(roomId, {
+              reliable: true
+          });
+  
+          // Setup connection handlers
+          conn.on('open', function() {
+              console.log('[PeerNetwork] Connection opened with:', conn.peer);
+              PeerNetworkState.connections[conn.peer] = conn;
+  
+              // Notify C++ code
+              if (Module._OnPlayerJoined) {
+                  var peerIdPtr = Module.allocateUTF8(conn.peer);
+                  Module._OnPlayerJoined(peerIdPtr);
+                  Module._free(peerIdPtr);
+              }
+          });
+  
+          conn.on('data', function(data) {
+              console.log('[PeerNetwork] Received:', data);
+  
+              // Notify C++ code with message
+              if (Module._OnNetworkMessage) {
+                  var dataStr = JSON.stringify(data);
+                  var dataPtr = Module.allocateUTF8(dataStr);
+                  Module._OnNetworkMessage(dataPtr);
+                  Module._free(dataPtr);
+              }
+          });
+  
+          conn.on('close', function() {
+              console.log('[PeerNetwork] Connection closed with:', conn.peer);
+              delete PeerNetworkState.connections[conn.peer];
+  
+              // Notify C++ code
+              if (Module._OnPlayerLeft) {
+                  var peerIdPtr = Module.allocateUTF8(conn.peer);
+                  Module._OnPlayerLeft(peerIdPtr);
+                  Module._free(peerIdPtr);
+              }
+          });
+  
+          conn.on('error', function(err) {
+              console.error('[PeerNetwork] Connection error:', err);
+          });
+  
+          return 1;
+      }
+
+  
+  function _JS_SendMessageTo(peerIdPtr, messagePtr) {
+          var peerId = UTF8ToString(peerIdPtr);
+          var message = UTF8ToString(messagePtr);
+          console.log('[PeerNetwork] Sending message to ' + peerId + ':', message);
+  
+          var messageObj = JSON.parse(message);
+  
+          if (PeerNetworkState.connections.hasOwnProperty(peerId)) {
+              try {
+                  PeerNetworkState.connections[peerId].send(messageObj);
+              } catch (e) {
+                  console.error('[PeerNetwork] Error sending to', peerId, ':', e);
+              }
+          } else {
+              console.warn('[PeerNetwork] Could not send to peer, no connection:', peerId);
+          }
+      }
+
   var ___assert_fail = (condition, filename, line, func) =>
       abort(`Assertion failed: ${UTF8ToString(condition)}, at: ` + [filename ? UTF8ToString(filename) : 'unknown filename', line, func ? UTF8ToString(func) : 'unknown function']);
 
@@ -1416,18 +1587,10 @@ async function createWasm() {
       var startIdx = outIdx;
       var endIdx = outIdx + maxBytesToWrite - 1; // -1 for string null terminator.
       for (var i = 0; i < str.length; ++i) {
-        // Gotcha: charCodeAt returns a 16-bit word that is a UTF-16 encoded code
-        // unit, not a Unicode code point of the character! So decode
-        // UTF16->UTF32->UTF8.
-        // See http://unicode.org/faq/utf_bom.html#utf16-3
         // For UTF8 byte structure, see http://en.wikipedia.org/wiki/UTF-8#Description
         // and https://www.ietf.org/rfc/rfc2279.txt
         // and https://tools.ietf.org/html/rfc3629
-        var u = str.charCodeAt(i); // possibly a lead surrogate
-        if (u >= 0xD800 && u <= 0xDFFF) {
-          var u1 = str.charCodeAt(++i);
-          u = 0x10000 + ((u & 0x3FF) << 10) | (u1 & 0x3FF);
-        }
+        var u = str.codePointAt(i);
         if (u <= 0x7F) {
           if (outIdx >= endIdx) break;
           heap[outIdx++] = u;
@@ -1447,6 +1610,9 @@ async function createWasm() {
           heap[outIdx++] = 0x80 | ((u >> 12) & 63);
           heap[outIdx++] = 0x80 | ((u >> 6) & 63);
           heap[outIdx++] = 0x80 | (u & 63);
+          // Gotcha: if codePoint is over 0xFFFF, it is represented as a surrogate pair in UTF-16.
+          // We need to manually skip over the second code unit for correct iteration.
+          i++;
         }
       }
       // Null-terminate the pointer to the buffer.
@@ -1975,61 +2141,6 @@ async function createWasm() {
   },
   };
   
-  var asyncLoad = async (url) => {
-      var arrayBuffer = await readAsync(url);
-      assert(arrayBuffer, `Loading data file "${url}" failed (no arrayBuffer).`);
-      return new Uint8Array(arrayBuffer);
-    };
-  asyncLoad.isAsync = true;
-  
-  
-  var FS_createDataFile = (...args) => FS.createDataFile(...args);
-  
-  var preloadPlugins = [];
-  var FS_handledByPreloadPlugin = (byteArray, fullname, finish, onerror) => {
-      // Ensure plugins are ready.
-      if (typeof Browser != 'undefined') Browser.init();
-  
-      var handled = false;
-      preloadPlugins.forEach((plugin) => {
-        if (handled) return;
-        if (plugin['canHandle'](fullname)) {
-          plugin['handle'](byteArray, fullname, finish, onerror);
-          handled = true;
-        }
-      });
-      return handled;
-    };
-  var FS_createPreloadedFile = (parent, name, url, canRead, canWrite, onload, onerror, dontCreateFile, canOwn, preFinish) => {
-      // TODO we should allow people to just pass in a complete filename instead
-      // of parent and name being that we just join them anyways
-      var fullname = name ? PATH_FS.resolve(PATH.join2(parent, name)) : parent;
-      var dep = getUniqueRunDependency(`cp ${fullname}`); // might have several active requests for the same fullname
-      function processData(byteArray) {
-        function finish(byteArray) {
-          preFinish?.();
-          if (!dontCreateFile) {
-            FS_createDataFile(parent, name, byteArray, canRead, canWrite, canOwn);
-          }
-          onload?.();
-          removeRunDependency(dep);
-        }
-        if (FS_handledByPreloadPlugin(byteArray, fullname, finish, () => {
-          onerror?.();
-          removeRunDependency(dep);
-        })) {
-          return;
-        }
-        finish(byteArray);
-      }
-      addRunDependency(dep);
-      if (typeof url == 'string') {
-        asyncLoad(url).then(processData, onerror);
-      } else {
-        processData(url);
-      }
-    };
-  
   var FS_modeStringToFlags = (str) => {
       var flagModes = {
         'r': 0,
@@ -2052,8 +2163,6 @@ async function createWasm() {
       if (canWrite) mode |= 146;
       return mode;
     };
-  
-  
   
   
   
@@ -2182,6 +2291,66 @@ async function createWasm() {
       'ENOTRECOVERABLE': 56,
       'EOWNERDEAD': 62,
       'ESTRPIPE': 135,
+    };
+  
+  var asyncLoad = async (url) => {
+      var arrayBuffer = await readAsync(url);
+      assert(arrayBuffer, `Loading data file "${url}" failed (no arrayBuffer).`);
+      return new Uint8Array(arrayBuffer);
+    };
+  
+  
+  var FS_createDataFile = (...args) => FS.createDataFile(...args);
+  
+  var getUniqueRunDependency = (id) => {
+      var orig = id;
+      while (1) {
+        if (!runDependencyTracking[id]) return id;
+        id = orig + Math.random();
+      }
+    };
+  
+  
+  
+  var preloadPlugins = [];
+  var FS_handledByPreloadPlugin = async (byteArray, fullname) => {
+      // Ensure plugins are ready.
+      if (typeof Browser != 'undefined') Browser.init();
+  
+      for (var plugin of preloadPlugins) {
+        if (plugin['canHandle'](fullname)) {
+          assert(plugin['handle'].constructor.name === 'AsyncFunction', 'Filesystem plugin handlers must be async functions (See #24914)')
+          return plugin['handle'](byteArray, fullname);
+        }
+      }
+      // In no plugin handled this file then return the original/unmodified
+      // byteArray.
+      return byteArray;
+    };
+  var FS_preloadFile = async (parent, name, url, canRead, canWrite, dontCreateFile, canOwn, preFinish) => {
+      // TODO we should allow people to just pass in a complete filename instead
+      // of parent and name being that we just join them anyways
+      var fullname = name ? PATH_FS.resolve(PATH.join2(parent, name)) : parent;
+      var dep = getUniqueRunDependency(`cp ${fullname}`); // might have several active requests for the same fullname
+      addRunDependency(dep);
+  
+      try {
+        var byteArray = url;
+        if (typeof url == 'string') {
+          byteArray = await asyncLoad(url);
+        }
+  
+        byteArray = await FS_handledByPreloadPlugin(byteArray, fullname);
+        preFinish?.();
+        if (!dontCreateFile) {
+          FS_createDataFile(parent, name, byteArray, canRead, canWrite, canOwn);
+        }
+      } finally {
+        removeRunDependency(dep);
+      }
+    };
+  var FS_createPreloadedFile = (parent, name, url, canRead, canWrite, onload, onerror, dontCreateFile, canOwn, preFinish) => {
+      FS_preloadFile(parent, name, url, canRead, canWrite, dontCreateFile, canOwn, preFinish).then(onload).catch(onerror);
     };
   var FS = {
   root:null,
@@ -2318,6 +2487,9 @@ async function createWasm() {
               current_path = PATH.dirname(current_path);
               if (FS.isRoot(current)) {
                 path = current_path + '/' + parts.slice(i + 1).join('/');
+                // We're making progress here, don't let many consecutive ..'s
+                // lead to ELOOP
+                nlinks--;
                 continue linkloop;
               } else {
                 current = current.parent;
@@ -3332,33 +3504,29 @@ async function createWasm() {
         opts.flags = opts.flags || 0;
         opts.encoding = opts.encoding || 'binary';
         if (opts.encoding !== 'utf8' && opts.encoding !== 'binary') {
-          throw new Error(`Invalid encoding type "${opts.encoding}"`);
+          abort(`Invalid encoding type "${opts.encoding}"`);
         }
-        var ret;
         var stream = FS.open(path, opts.flags);
         var stat = FS.stat(path);
         var length = stat.size;
         var buf = new Uint8Array(length);
         FS.read(stream, buf, 0, length, 0);
         if (opts.encoding === 'utf8') {
-          ret = UTF8ArrayToString(buf);
-        } else if (opts.encoding === 'binary') {
-          ret = buf;
+          buf = UTF8ArrayToString(buf);
         }
         FS.close(stream);
-        return ret;
+        return buf;
       },
   writeFile(path, data, opts = {}) {
         opts.flags = opts.flags || 577;
         var stream = FS.open(path, opts.flags, opts.mode);
         if (typeof data == 'string') {
-          var buf = new Uint8Array(lengthBytesUTF8(data)+1);
-          var actualNumBytes = stringToUTF8Array(data, buf, 0, buf.length);
-          FS.write(stream, buf, 0, actualNumBytes, undefined, opts.canOwn);
-        } else if (ArrayBuffer.isView(data)) {
+          data = new Uint8Array(intArrayFromString(data, true));
+        }
+        if (ArrayBuffer.isView(data)) {
           FS.write(stream, data, 0, data.byteLength, undefined, opts.canOwn);
         } else {
-          throw new Error('Unsupported data type');
+          abort('Unsupported data type');
         }
         FS.close(stream);
       },
@@ -3654,11 +3822,10 @@ async function createWasm() {
   forceLoadFile(obj) {
         if (obj.isDevice || obj.isFolder || obj.link || obj.contents) return true;
         if (typeof XMLHttpRequest != 'undefined') {
-          throw new Error("Lazy loading should have been performed (contents set) in createLazyFile, but it was not. Lazy loading only works in web workers. Use --embed-file or --preload-file in emcc on the main thread.");
+          abort("Lazy loading should have been performed (contents set) in createLazyFile, but it was not. Lazy loading only works in web workers. Use --embed-file or --preload-file in emcc on the main thread.");
         } else { // Command-line.
           try {
             obj.contents = readBinary(obj.url);
-            obj.usedBytes = obj.contents.length;
           } catch (e) {
             throw new FS.ErrnoError(29);
           }
@@ -3686,7 +3853,7 @@ async function createWasm() {
             var xhr = new XMLHttpRequest();
             xhr.open('HEAD', url, false);
             xhr.send(null);
-            if (!(xhr.status >= 200 && xhr.status < 300 || xhr.status === 304)) throw new Error("Couldn't load " + url + ". Status: " + xhr.status);
+            if (!(xhr.status >= 200 && xhr.status < 300 || xhr.status === 304)) abort("Couldn't load " + url + ". Status: " + xhr.status);
             var datalength = Number(xhr.getResponseHeader("Content-length"));
             var header;
             var hasByteServing = (header = xhr.getResponseHeader("Accept-Ranges")) && header === "bytes";
@@ -3698,8 +3865,8 @@ async function createWasm() {
   
             // Function to get a range from the remote URL.
             var doXHR = (from, to) => {
-              if (from > to) throw new Error("invalid range (" + from + ", " + to + ") or no bytes requested!");
-              if (to > datalength-1) throw new Error("only " + datalength + " bytes available! programmer error!");
+              if (from > to) abort("invalid range (" + from + ", " + to + ") or no bytes requested!");
+              if (to > datalength-1) abort("only " + datalength + " bytes available! programmer error!");
   
               // TODO: Use mozResponseArrayBuffer, responseStream, etc. if available.
               var xhr = new XMLHttpRequest();
@@ -3713,7 +3880,7 @@ async function createWasm() {
               }
   
               xhr.send(null);
-              if (!(xhr.status >= 200 && xhr.status < 300 || xhr.status === 304)) throw new Error("Couldn't load " + url + ". Status: " + xhr.status);
+              if (!(xhr.status >= 200 && xhr.status < 300 || xhr.status === 304)) abort("Couldn't load " + url + ". Status: " + xhr.status);
               if (xhr.response !== undefined) {
                 return new Uint8Array(/** @type{Array<number>} */(xhr.response || []));
               }
@@ -3727,7 +3894,7 @@ async function createWasm() {
               if (typeof lazyArray.chunks[chunkNum] == 'undefined') {
                 lazyArray.chunks[chunkNum] = doXHR(start, end);
               }
-              if (typeof lazyArray.chunks[chunkNum] == 'undefined') throw new Error('doXHR failed!');
+              if (typeof lazyArray.chunks[chunkNum] == 'undefined') abort('doXHR failed!');
               return lazyArray.chunks[chunkNum];
             });
   
@@ -3758,7 +3925,7 @@ async function createWasm() {
         }
   
         if (typeof XMLHttpRequest != 'undefined') {
-          if (!ENVIRONMENT_IS_WORKER) throw 'Cannot do synchronous binary XHRs outside webworkers in modern browsers. Use --embed-file or --preload-file in emcc';
+          if (!ENVIRONMENT_IS_WORKER) abort('Cannot do synchronous binary XHRs outside webworkers in modern browsers. Use --embed-file or --preload-file in emcc');
           var lazyArray = new LazyUint8Array();
           var properties = { isDevice: false, contents: lazyArray };
         } else {
@@ -3869,12 +4036,12 @@ async function createWasm() {
         return dir + '/' + path;
       },
   writeStat(buf, stat) {
-        HEAP32[((buf)>>2)] = stat.dev;
-        HEAP32[(((buf)+(4))>>2)] = stat.mode;
+        HEAPU32[((buf)>>2)] = stat.dev;
+        HEAPU32[(((buf)+(4))>>2)] = stat.mode;
         HEAPU32[(((buf)+(8))>>2)] = stat.nlink;
-        HEAP32[(((buf)+(12))>>2)] = stat.uid;
-        HEAP32[(((buf)+(16))>>2)] = stat.gid;
-        HEAP32[(((buf)+(20))>>2)] = stat.rdev;
+        HEAPU32[(((buf)+(12))>>2)] = stat.uid;
+        HEAPU32[(((buf)+(16))>>2)] = stat.gid;
+        HEAPU32[(((buf)+(20))>>2)] = stat.rdev;
         HEAP64[(((buf)+(24))>>3)] = BigInt(stat.size);
         HEAP32[(((buf)+(32))>>2)] = 4096;
         HEAP32[(((buf)+(36))>>2)] = stat.blocks;
@@ -3891,16 +4058,16 @@ async function createWasm() {
         return 0;
       },
   writeStatFs(buf, stats) {
-        HEAP32[(((buf)+(4))>>2)] = stats.bsize;
-        HEAP32[(((buf)+(40))>>2)] = stats.bsize;
-        HEAP32[(((buf)+(8))>>2)] = stats.blocks;
-        HEAP32[(((buf)+(12))>>2)] = stats.bfree;
-        HEAP32[(((buf)+(16))>>2)] = stats.bavail;
-        HEAP32[(((buf)+(20))>>2)] = stats.files;
-        HEAP32[(((buf)+(24))>>2)] = stats.ffree;
-        HEAP32[(((buf)+(28))>>2)] = stats.fsid;
-        HEAP32[(((buf)+(44))>>2)] = stats.flags;  // ST_NOSUID
-        HEAP32[(((buf)+(36))>>2)] = stats.namelen;
+        HEAPU32[(((buf)+(4))>>2)] = stats.bsize;
+        HEAPU32[(((buf)+(60))>>2)] = stats.bsize;
+        HEAP64[(((buf)+(8))>>3)] = BigInt(stats.blocks);
+        HEAP64[(((buf)+(16))>>3)] = BigInt(stats.bfree);
+        HEAP64[(((buf)+(24))>>3)] = BigInt(stats.bavail);
+        HEAP64[(((buf)+(32))>>3)] = BigInt(stats.files);
+        HEAP64[(((buf)+(40))>>3)] = BigInt(stats.ffree);
+        HEAPU32[(((buf)+(48))>>2)] = stats.fsid;
+        HEAPU32[(((buf)+(64))>>2)] = stats.flags;  // ST_NOSUID
+        HEAPU32[(((buf)+(56))>>2)] = stats.namelen;
       },
   doMsync(addr, stream, len, flags, offset) {
         if (!FS.isFile(stream.node.mode)) {
@@ -4094,6 +4261,7 @@ async function createWasm() {
           if (!stream.tty) return -59;
           return -28; // not supported
         }
+        case 21537:
         case 21531: {
           var argp = syscallGetVarargP();
           return FS.ioctl(stream, op, argp);
@@ -4235,6 +4403,48 @@ async function createWasm() {
       return 0;
     ;
   }
+
+  var readEmAsmArgsArray = [];
+  var readEmAsmArgs = (sigPtr, buf) => {
+      // Nobody should have mutated _readEmAsmArgsArray underneath us to be something else than an array.
+      assert(Array.isArray(readEmAsmArgsArray));
+      // The input buffer is allocated on the stack, so it must be stack-aligned.
+      assert(buf % 16 == 0);
+      readEmAsmArgsArray.length = 0;
+      var ch;
+      // Most arguments are i32s, so shift the buffer pointer so it is a plain
+      // index into HEAP32.
+      while (ch = HEAPU8[sigPtr++]) {
+        var chr = String.fromCharCode(ch);
+        var validChars = ['d', 'f', 'i', 'p'];
+        // In WASM_BIGINT mode we support passing i64 values as bigint.
+        validChars.push('j');
+        assert(validChars.includes(chr), `Invalid character ${ch}("${chr}") in readEmAsmArgs! Use only [${validChars}], and do not specify "v" for void return argument.`);
+        // Floats are always passed as doubles, so all types except for 'i'
+        // are 8 bytes and require alignment.
+        var wide = (ch != 105);
+        wide &= (ch != 112);
+        buf += wide && (buf % 8) ? 4 : 0;
+        readEmAsmArgsArray.push(
+          // Special case for pointers under wasm64 or CAN_ADDRESS_2GB mode.
+          ch == 112 ? HEAPU32[((buf)>>2)] :
+          ch == 106 ? HEAP64[((buf)>>3)] :
+          ch == 105 ?
+            HEAP32[((buf)>>2)] :
+            HEAPF64[((buf)>>3)]
+        );
+        buf += wide ? 8 : 4;
+      }
+      return readEmAsmArgsArray;
+    };
+  var runEmAsmFunction = (code, sigPtr, argbuf) => {
+      var args = readEmAsmArgs(sigPtr, argbuf);
+      assert(ASM_CONSTS.hasOwnProperty(code), `No EM_ASM constant found at address ${code}.  The loaded WebAssembly file is likely out of sync with the generated JavaScript.`);
+      return ASM_CONSTS[code](...args);
+    };
+  var _emscripten_asm_const_int = (code, sigPtr, argbuf) => {
+      return runEmAsmFunction(code, sigPtr, argbuf);
+    };
 
 
   var maybeCStringToJsString = (cString) => {
@@ -4420,7 +4630,7 @@ async function createWasm() {
       stringToUTF8(e.mapping, eventStruct + 1176, 64);
     };
   var _emscripten_get_gamepad_status = (index, gamepadState) => {
-      if (!JSEvents.lastGamepadState) throw 'emscripten_get_gamepad_status() can only be called after having first called emscripten_sample_gamepad_data() and that function has returned EMSCRIPTEN_RESULT_SUCCESS!';
+      assert(JSEvents.lastGamepadState, 'emscripten_get_gamepad_status() can only be called after having first called emscripten_sample_gamepad_data() and that function has returned EMSCRIPTEN_RESULT_SUCCESS!');
       // INVALID_PARAM is returned on a Gamepad index that never was there.
       if (index < 0 || index >= JSEvents.lastGamepadState.length) return -5;
   
@@ -4436,7 +4646,7 @@ async function createWasm() {
 
 
   var _emscripten_get_num_gamepads = () => {
-      if (!JSEvents.lastGamepadState) throw 'emscripten_get_num_gamepads() can only be called after having first called emscripten_sample_gamepad_data() and that function has returned EMSCRIPTEN_RESULT_SUCCESS!';
+      assert(JSEvents.lastGamepadState, 'emscripten_get_num_gamepads() can only be called after having first called emscripten_sample_gamepad_data() and that function has returned EMSCRIPTEN_RESULT_SUCCESS!');
       // N.B. Do not call emscripten_get_num_gamepads() unless having first called emscripten_sample_gamepad_data(), and that has returned EMSCRIPTEN_RESULT_SUCCESS.
       // Otherwise the following line will throw an exception.
       return JSEvents.lastGamepadState.length;
@@ -6613,15 +6823,15 @@ async function createWasm() {
     };
   
   var growMemory = (size) => {
-      var b = wasmMemory.buffer;
-      var pages = ((size - b.byteLength + 65535) / 65536) | 0;
+      var oldHeapSize = wasmMemory.buffer.byteLength;
+      var pages = ((size - oldHeapSize + 65535) / 65536) | 0;
       try {
         // round size grow request up to wasm page size (fixed 64KB per spec)
         wasmMemory.grow(pages); // .grow() takes a delta compared to the previous size
         updateMemoryViews();
         return 1 /*success*/;
       } catch(e) {
-        err(`growMemory: Attempted to grow heap from ${b.byteLength} bytes to ${size} bytes, but got error: ${e}`);
+        err(`growMemory: Attempted to grow heap from ${oldHeapSize} bytes to ${size} bytes, but got error: ${e}`);
       }
       // implicit 0 return to save code size (caller will cast "undefined" into 0
       // anyhow)
@@ -6716,11 +6926,9 @@ async function createWasm() {
       HEAP16[idx*2 + 14] = e.button;
       HEAP16[idx*2 + 15] = e.buttons;
   
-      HEAP32[idx + 8] = e["movementX"]
-        ;
+      HEAP32[idx + 8] = e["movementX"];
   
-      HEAP32[idx + 9] = e["movementY"]
-        ;
+      HEAP32[idx + 9] = e["movementY"];
   
       // Note: rect contains doubles (truncated to placate SAFE_HEAP, which is the same behaviour when writing to HEAP32 anyway)
       var rect = getBoundingClientRect(target);
@@ -6756,8 +6964,14 @@ async function createWasm() {
   
   
   
+  
+  function getFullscreenElement() {
+      return document.fullscreenElement || document.mozFullScreenElement ||
+             document.webkitFullscreenElement || document.webkitCurrentFullScreenElement ||
+             document.msFullscreenElement;
+    }
   var fillFullscreenChangeEventData = (eventStruct) => {
-      var fullscreenElement = document.fullscreenElement || document.mozFullScreenElement || document.webkitFullscreenElement || document.msFullscreenElement;
+      var fullscreenElement = getFullscreenElement();
       var isFullscreen = !!fullscreenElement;
       // Assigning a boolean to HEAP32 with expected type coercion.
       /** @suppress{checkTypes} */
@@ -7050,6 +7264,7 @@ async function createWasm() {
       }
     };
   
+  
   /** @param {number=} timeout */
   var safeSetTimeout = (func, timeout) => {
       
@@ -7088,31 +7303,32 @@ async function createWasm() {
         imagePlugin['canHandle'] = function imagePlugin_canHandle(name) {
           return !Module['noImageDecoding'] && /\.(jpg|jpeg|png|bmp|webp)$/i.test(name);
         };
-        imagePlugin['handle'] = function imagePlugin_handle(byteArray, name, onload, onerror) {
+        imagePlugin['handle'] = async function imagePlugin_handle(byteArray, name) {
           var b = new Blob([byteArray], { type: Browser.getMimetype(name) });
           if (b.size !== byteArray.length) { // Safari bug #118630
             // Safari's Blob can only take an ArrayBuffer
             b = new Blob([(new Uint8Array(byteArray)).buffer], { type: Browser.getMimetype(name) });
           }
           var url = URL.createObjectURL(b);
-          assert(typeof url == 'string', 'createObjectURL must return a url as a string');
-          var img = new Image();
-          img.onload = () => {
-            assert(img.complete, `Image ${name} could not be decoded`);
-            var canvas = /** @type {!HTMLCanvasElement} */ (document.createElement('canvas'));
-            canvas.width = img.width;
-            canvas.height = img.height;
-            var ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0);
-            Browser.preloadedImages[name] = canvas;
-            URL.revokeObjectURL(url);
-            onload?.(byteArray);
-          };
-          img.onerror = (event) => {
-            err(`Image ${url} could not be decoded`);
-            onerror?.();
-          };
-          img.src = url;
+          return new Promise((resolve, reject) => {
+            var img = new Image();
+            img.onload = () => {
+              assert(img.complete, `Image ${name} could not be decoded`);
+              var canvas = /** @type {!HTMLCanvasElement} */ (document.createElement('canvas'));
+              canvas.width = img.width;
+              canvas.height = img.height;
+              var ctx = canvas.getContext('2d');
+              ctx.drawImage(img, 0, 0);
+              Browser.preloadedImages[name] = canvas;
+              URL.revokeObjectURL(url);
+              resolve(byteArray);
+            };
+            img.onerror = (event) => {
+              err(`Image ${url} could not be decoded`);
+              reject();
+            };
+            img.src = url;
+          });
         };
         preloadPlugins.push(imagePlugin);
   
@@ -7120,60 +7336,55 @@ async function createWasm() {
         audioPlugin['canHandle'] = function audioPlugin_canHandle(name) {
           return !Module['noAudioDecoding'] && name.slice(-4) in { '.ogg': 1, '.wav': 1, '.mp3': 1 };
         };
-        audioPlugin['handle'] = function audioPlugin_handle(byteArray, name, onload, onerror) {
-          var done = false;
-          function finish(audio) {
-            if (done) return;
-            done = true;
-            Browser.preloadedAudios[name] = audio;
-            onload?.(byteArray);
-          }
-          function fail() {
-            if (done) return;
-            done = true;
-            Browser.preloadedAudios[name] = new Audio(); // empty shim
-            onerror?.();
-          }
-          var b = new Blob([byteArray], { type: Browser.getMimetype(name) });
-          var url = URL.createObjectURL(b); // XXX we never revoke this!
-          assert(typeof url == 'string', 'createObjectURL must return a url as a string');
-          var audio = new Audio();
-          audio.addEventListener('canplaythrough', () => finish(audio), false); // use addEventListener due to chromium bug 124926
-          audio.onerror = function audio_onerror(event) {
-            if (done) return;
-            err(`warning: browser could not fully decode audio ${name}, trying slower base64 approach`);
-            function encode64(data) {
-              var BASE = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-              var PAD = '=';
-              var ret = '';
-              var leftchar = 0;
-              var leftbits = 0;
-              for (var i = 0; i < data.length; i++) {
-                leftchar = (leftchar << 8) | data[i];
-                leftbits += 8;
-                while (leftbits >= 6) {
-                  var curr = (leftchar >> (leftbits-6)) & 0x3f;
-                  leftbits -= 6;
-                  ret += BASE[curr];
-                }
-              }
-              if (leftbits == 2) {
-                ret += BASE[(leftchar&3) << 4];
-                ret += PAD + PAD;
-              } else if (leftbits == 4) {
-                ret += BASE[(leftchar&0xf) << 2];
-                ret += PAD;
-              }
-              return ret;
+        audioPlugin['handle'] = async function audioPlugin_handle(byteArray, name) {
+          return new Promise((resolve, reject) => {
+            var done = false;
+            function finish(audio) {
+              if (done) return;
+              done = true;
+              Browser.preloadedAudios[name] = audio;
+              resolve(byteArray);
             }
-            audio.src = 'data:audio/x-' + name.slice(-3) + ';base64,' + encode64(byteArray);
-            finish(audio); // we don't wait for confirmation this worked - but it's worth trying
-          };
-          audio.src = url;
-          // workaround for chrome bug 124926 - we do not always get oncanplaythrough or onerror
-          safeSetTimeout(() => {
-            finish(audio); // try to use it even though it is not necessarily ready to play
-          }, 10000);
+            var b = new Blob([byteArray], { type: Browser.getMimetype(name) });
+            var url = URL.createObjectURL(b); // XXX we never revoke this!
+            var audio = new Audio();
+            audio.addEventListener('canplaythrough', () => finish(audio), false); // use addEventListener due to chromium bug 124926
+            audio.onerror = function audio_onerror(event) {
+              if (done) return;
+              err(`warning: browser could not fully decode audio ${name}, trying slower base64 approach`);
+              function encode64(data) {
+                var BASE = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+                var PAD = '=';
+                var ret = '';
+                var leftchar = 0;
+                var leftbits = 0;
+                for (var i = 0; i < data.length; i++) {
+                  leftchar = (leftchar << 8) | data[i];
+                  leftbits += 8;
+                  while (leftbits >= 6) {
+                    var curr = (leftchar >> (leftbits-6)) & 0x3f;
+                    leftbits -= 6;
+                    ret += BASE[curr];
+                  }
+                }
+                if (leftbits == 2) {
+                  ret += BASE[(leftchar&3) << 4];
+                  ret += PAD + PAD;
+                } else if (leftbits == 4) {
+                  ret += BASE[(leftchar&0xf) << 2];
+                  ret += PAD;
+                }
+                return ret;
+              }
+              audio.src = 'data:audio/x-' + name.slice(-3) + ';base64,' + encode64(byteArray);
+              finish(audio); // we don't wait for confirmation this worked - but it's worth trying
+            };
+            audio.src = url;
+            // workaround for chrome bug 124926 - we do not always get oncanplaythrough or onerror
+            safeSetTimeout(() => {
+              finish(audio); // try to use it even though it is not necessarily ready to play
+            }, 10000);
+          });
         };
         preloadPlugins.push(audioPlugin);
   
@@ -7181,32 +7392,14 @@ async function createWasm() {
   
         function pointerLockChange() {
           var canvas = Browser.getCanvas();
-          Browser.pointerLock = document['pointerLockElement'] === canvas ||
-                                document['mozPointerLockElement'] === canvas ||
-                                document['webkitPointerLockElement'] === canvas ||
-                                document['msPointerLockElement'] === canvas;
+          Browser.pointerLock = document.pointerLockElement === canvas;
         }
         var canvas = Browser.getCanvas();
         if (canvas) {
           // forced aspect ratio can be enabled by defining 'forcedAspectRatio' on Module
           // Module['forcedAspectRatio'] = 4 / 3;
   
-          canvas.requestPointerLock = canvas['requestPointerLock'] ||
-                                      canvas['mozRequestPointerLock'] ||
-                                      canvas['webkitRequestPointerLock'] ||
-                                      canvas['msRequestPointerLock'] ||
-                                      (() => {});
-          canvas.exitPointerLock = document['exitPointerLock'] ||
-                                   document['mozExitPointerLock'] ||
-                                   document['webkitExitPointerLock'] ||
-                                   document['msExitPointerLock'] ||
-                                   (() => {}); // no-op if function does not exist
-          canvas.exitPointerLock = canvas.exitPointerLock.bind(document);
-  
           document.addEventListener('pointerlockchange', pointerLockChange, false);
-          document.addEventListener('mozpointerlockchange', pointerLockChange, false);
-          document.addEventListener('webkitpointerlockchange', pointerLockChange, false);
-          document.addEventListener('mspointerlockchange', pointerLockChange, false);
   
           if (Module['elementPointerLock']) {
             canvas.addEventListener("click", (ev) => {
@@ -7275,9 +7468,7 @@ async function createWasm() {
         function fullscreenChange() {
           Browser.isFullscreen = false;
           var canvasContainer = canvas.parentNode;
-          if ((document['fullscreenElement'] || document['mozFullScreenElement'] ||
-               document['msFullscreenElement'] || document['webkitFullscreenElement'] ||
-               document['webkitCurrentFullScreenElement']) === canvasContainer) {
+          if (getFullscreenElement() === canvasContainer) {
             canvas.exitFullscreen = Browser.exitFullscreen;
             if (Browser.lockPointer) canvas.requestPointerLock();
             Browser.isFullscreen = true;
@@ -7404,11 +7595,11 @@ async function createWasm() {
                 delta *= 80;
                 break;
               default:
-                throw 'unrecognized mouse wheel delta mode: ' + event.deltaMode;
+                abort('unrecognized mouse wheel delta mode: ' + event.deltaMode);
             }
             break;
           default:
-            throw 'unrecognized mouse wheel event: ' + event.type;
+            abort('unrecognized mouse wheel event: ' + event.type);
         }
         return delta;
       },
@@ -7541,9 +7732,7 @@ async function createWasm() {
             h = Math.round(w / Module['forcedAspectRatio']);
           }
         }
-        if (((document['fullscreenElement'] || document['mozFullScreenElement'] ||
-             document['msFullscreenElement'] || document['webkitFullscreenElement'] ||
-             document['webkitCurrentFullScreenElement']) === canvas.parentNode) && (typeof screen != 'undefined')) {
+        if ((getFullscreenElement() === canvas.parentNode) && (typeof screen != 'undefined')) {
            var factor = Math.min(screen.width / w, screen.height / h);
            w = Math.round(w * factor);
            h = Math.round(h * factor);
@@ -7584,7 +7773,7 @@ async function createWasm() {
       if (!getEnvStrings.strings) {
         // Default values.
         // Browser language detection #8751
-        var lang = ((typeof navigator == 'object' && navigator.languages && navigator.languages[0]) || 'C').replace('-', '_') + '.UTF-8';
+        var lang = ((typeof navigator == 'object' && navigator.language) || 'C').replace('-', '_') + '.UTF-8';
         var env = {
           'USER': 'web_user',
           'LOGNAME': 'web_user',
@@ -8073,12 +8262,12 @@ async function createWasm() {
   requestAnimationFrame(func) {
         if (typeof requestAnimationFrame == 'function') {
           requestAnimationFrame(func);
-          return;
+        } else {
+          MainLoop.fakeRequestAnimationFrame(func);
         }
-        var RAF = MainLoop.fakeRequestAnimationFrame;
-        RAF(func);
       },
   };
+  
   
   
   
@@ -8487,7 +8676,7 @@ async function createWasm() {
         var resizeNeeded = false;
   
         // If the client is requesting fullscreen mode
-        if (document["fullscreen"] || document["fullScreen"] || document["mozFullScreen"] || document["webkitIsFullScreen"]) {
+        if (getFullscreenElement()) {
           if (!GLFW.active.fullscreen) {
             resizeNeeded = width != screen.width || height != screen.height;
             GLFW.active.storedX = GLFW.active.x;
@@ -8756,7 +8945,7 @@ async function createWasm() {
               case 0x00034001: { // GLFW_CURSOR_NORMAL
                 win.inputModes[mode] = value;
                 canvas.removeEventListener('click', GLFW.onClickRequestPointerLock, true);
-                canvas.exitPointerLock();
+                document.exitPointerLock();
                 break;
               }
               case 0x00034002: { // GLFW_CURSOR_HIDDEN
@@ -8876,7 +9065,7 @@ async function createWasm() {
         for (i = 0; i < GLFW.windows.length && GLFW.windows[i] !== null; i++) {
           // no-op
         }
-        if (i > 0) throw "glfwCreateWindow only supports one window at time currently";
+        if (i > 0) abort("glfwCreateWindow only supports one window at time currently");
   
         // id for window
         id = i + 1;
@@ -8961,9 +9150,7 @@ async function createWasm() {
         function fullscreenChange() {
           Browser.isFullscreen = false;
           var canvasContainer = canvas.parentNode;
-          if ((document['fullscreenElement'] || document['mozFullScreenElement'] ||
-            document['msFullscreenElement'] || document['webkitFullscreenElement'] ||
-            document['webkitCurrentFullScreenElement']) === canvasContainer) {
+          if (getFullscreenElement() === canvasContainer) {
             canvas.exitFullscreen = Browser.exitFullscreen;
             if (Browser.lockPointer) canvas.requestPointerLock();
             Browser.isFullscreen = true;
@@ -9030,9 +9217,7 @@ async function createWasm() {
             h = Math.round(w / Module['forcedAspectRatio']);
           }
         }
-        if (((document['fullscreenElement'] || document['mozFullScreenElement'] ||
-          document['msFullscreenElement'] || document['webkitFullscreenElement'] ||
-          document['webkitCurrentFullScreenElement']) === canvas.parentNode) && (typeof screen != 'undefined')) {
+        if ((getFullscreenElement() === canvas.parentNode) && (typeof screen != 'undefined')) {
           var factor = Math.min(screen.width / w, screen.height / h);
           w = Math.round(w * factor);
           h = Math.round(h * factor);
@@ -9329,26 +9514,6 @@ async function createWasm() {
     };
   
   
-  var sigToWasmTypes = (sig) => {
-      var typeNames = {
-        'i': 'i32',
-        'j': 'i64',
-        'f': 'f32',
-        'd': 'f64',
-        'e': 'externref',
-        'p': 'i32',
-      };
-      var type = {
-        parameters: [],
-        results: sig[0] == 'v' ? [] : [typeNames[sig[0]]]
-      };
-      for (var i = 1; i < sig.length; ++i) {
-        assert(sig[i] in typeNames, 'invalid signature char: ' + sig[i]);
-        type.parameters.push(typeNames[sig[i]]);
-      }
-      return type;
-    };
-  
   var runtimeKeepalivePush = () => {
       runtimeKeepaliveCounter += 1;
     };
@@ -9387,30 +9552,37 @@ async function createWasm() {
                     !isAsyncifyImport &&
                     !changedToDisabled &&
                     !ignoredInvoke) {
-                  throw new Error(`import ${x} was not in ASYNCIFY_IMPORTS, but changed the state`);
+                  abort(`import ${x} was not in ASYNCIFY_IMPORTS, but changed the state`);
                 }
               }
             };
           }
         }
       },
+  instrumentFunction(original) {
+        var wrapper = (...args) => {
+          Asyncify.exportCallStack.push(original);
+          try {
+            return original(...args);
+          } finally {
+            if (!ABORT) {
+              var top = Asyncify.exportCallStack.pop();
+              assert(top === original);
+              Asyncify.maybeStopUnwind();
+            }
+          }
+        };
+        Asyncify.funcWrappers.set(original, wrapper);
+        return wrapper;
+      },
   instrumentWasmExports(exports) {
         var ret = {};
         for (let [x, original] of Object.entries(exports)) {
           if (typeof original == 'function') {
-            ret[x] = (...args) => {
-              Asyncify.exportCallStack.push(x);
-              try {
-                return original(...args);
-              } finally {
-                if (!ABORT) {
-                  var y = Asyncify.exportCallStack.pop();
-                  assert(y === x);
-                  Asyncify.maybeStopUnwind();
-                }
-              }
-            };
-          } else {
+            var wrapper = Asyncify.instrumentFunction(original);
+            ret[x] = wrapper;
+  
+         } else {
             ret[x] = original;
           }
         }
@@ -9427,21 +9599,20 @@ async function createWasm() {
   currData:null,
   handleSleepReturnValue:0,
   exportCallStack:[],
-  callStackNameToId:{
-  },
-  callStackIdToName:{
-  },
+  callstackFuncToId:new Map,
+  callStackIdToFunc:new Map,
+  funcWrappers:new Map,
   callStackId:0,
   asyncPromiseHandlers:null,
   sleepCallbacks:[],
-  getCallStackId(funcName) {
-        var id = Asyncify.callStackNameToId[funcName];
-        if (id === undefined) {
-          id = Asyncify.callStackId++;
-          Asyncify.callStackNameToId[funcName] = id;
-          Asyncify.callStackIdToName[id] = funcName;
+  getCallStackId(func) {
+        assert(func);
+        if (!Asyncify.callstackFuncToId.has(func)) {
+          var id = Asyncify.callStackId++;
+          Asyncify.callstackFuncToId.set(func, id);
+          Asyncify.callStackIdToFunc.set(id, func);
         }
-        return id;
+        return Asyncify.callstackFuncToId.get(func);
       },
   maybeStopUnwind() {
         if (Asyncify.currData &&
@@ -9472,7 +9643,7 @@ async function createWasm() {
         // An asyncify data structure has three fields:
         //  0  current stack pos
         //  4  max stack pos
-        //  8  id of function at bottom of the call stack (callStackIdToName[id] == name of js function)
+        //  8  id of function at bottom of the call stack (callStackIdToFunc[id] == wasm func)
         //
         // The Asyncify ABI only interprets the first two fields, the rest is for the runtime.
         // We also embed a stack in the same memory region here, right next to the structure.
@@ -9488,21 +9659,21 @@ async function createWasm() {
       },
   setDataRewindFunc(ptr) {
         var bottomOfCallStack = Asyncify.exportCallStack[0];
+        assert(bottomOfCallStack, 'exportCallStack is empty');
         var rewindId = Asyncify.getCallStackId(bottomOfCallStack);
         HEAP32[(((ptr)+(8))>>2)] = rewindId;
       },
-  getDataRewindFuncName(ptr) {
+  getDataRewindFunc(ptr) {
         var id = HEAP32[(((ptr)+(8))>>2)];
-        var name = Asyncify.callStackIdToName[id];
-        return name;
-      },
-  getDataRewindFunc(name) {
-        var func = wasmExports[name];
+        var func = Asyncify.callStackIdToFunc.get(id);
+        assert(func, `id ${id} not found in callStackIdToFunc`);
         return func;
       },
   doRewind(ptr) {
-        var name = Asyncify.getDataRewindFuncName(ptr);
-        var func = Asyncify.getDataRewindFunc(name);
+        var original = Asyncify.getDataRewindFunc(ptr);
+        var func = Asyncify.funcWrappers.get(original);
+        assert(original);
+        assert(func);
         // Once we have rewound and the stack we no longer need to artificially
         // keep the runtime alive.
         
@@ -9604,6 +9775,130 @@ async function createWasm() {
       }),
   };
 
+  var getCFunc = (ident) => {
+      var func = Module['_' + ident]; // closure exported function
+      assert(func, 'Cannot call unknown function ' + ident + ', make sure it is exported');
+      return func;
+    };
+  
+  var writeArrayToMemory = (array, buffer) => {
+      assert(array.length >= 0, 'writeArrayToMemory array must have a length (should be an array or typed array)')
+      HEAP8.set(array, buffer);
+    };
+  
+  
+  
+  var stackAlloc = (sz) => __emscripten_stack_alloc(sz);
+  var stringToUTF8OnStack = (str) => {
+      var size = lengthBytesUTF8(str) + 1;
+      var ret = stackAlloc(size);
+      stringToUTF8(str, ret, size);
+      return ret;
+    };
+  
+  
+  
+  
+  
+  
+  
+    /**
+     * @param {string|null=} returnType
+     * @param {Array=} argTypes
+     * @param {Array=} args
+     * @param {Object=} opts
+     */
+  var ccall = (ident, returnType, argTypes, args, opts) => {
+      // For fast lookup of conversion functions
+      var toC = {
+        'string': (str) => {
+          var ret = 0;
+          if (str !== null && str !== undefined && str !== 0) { // null string
+            ret = stringToUTF8OnStack(str);
+          }
+          return ret;
+        },
+        'array': (arr) => {
+          var ret = stackAlloc(arr.length);
+          writeArrayToMemory(arr, ret);
+          return ret;
+        }
+      };
+  
+      function convertReturnValue(ret) {
+        if (returnType === 'string') {
+          return UTF8ToString(ret);
+        }
+        if (returnType === 'boolean') return Boolean(ret);
+        return ret;
+      }
+  
+      var func = getCFunc(ident);
+      var cArgs = [];
+      var stack = 0;
+      assert(returnType !== 'array', 'Return type should not be "array".');
+      if (args) {
+        for (var i = 0; i < args.length; i++) {
+          var converter = toC[argTypes[i]];
+          if (converter) {
+            if (stack === 0) stack = stackSave();
+            cArgs[i] = converter(args[i]);
+          } else {
+            cArgs[i] = args[i];
+          }
+        }
+      }
+      // Data for a previous async operation that was in flight before us.
+      var previousAsync = Asyncify.currData;
+      var ret = func(...cArgs);
+      function onDone(ret) {
+        runtimeKeepalivePop();
+        if (stack !== 0) stackRestore(stack);
+        return convertReturnValue(ret);
+      }
+    var asyncMode = opts?.async;
+  
+      // Keep the runtime alive through all calls. Note that this call might not be
+      // async, but for simplicity we push and pop in all calls.
+      runtimeKeepalivePush();
+      if (Asyncify.currData != previousAsync) {
+        // A change in async operation happened. If there was already an async
+        // operation in flight before us, that is an error: we should not start
+        // another async operation while one is active, and we should not stop one
+        // either. The only valid combination is to have no change in the async
+        // data (so we either had one in flight and left it alone, or we didn't have
+        // one), or to have nothing in flight and to start one.
+        assert(!(previousAsync && Asyncify.currData), 'We cannot start an async operation when one is already flight');
+        assert(!(previousAsync && !Asyncify.currData), 'We cannot stop an async operation in flight');
+        // This is a new async operation. The wasm is paused and has unwound its stack.
+        // We need to return a Promise that resolves the return value
+        // once the stack is rewound and execution finishes.
+        assert(asyncMode, 'The call to ' + ident + ' is running asynchronously. If this was intended, add the async option to the ccall/cwrap call.');
+        return Asyncify.whenDone().then(onDone);
+      }
+  
+      ret = onDone(ret);
+      // If this is an async ccall, ensure we return a promise
+      if (asyncMode) return Promise.resolve(ret);
+      return ret;
+    };
+
+  
+    /**
+     * @param {string=} returnType
+     * @param {Array=} argTypes
+     * @param {Object=} opts
+     */
+  var cwrap = (ident, returnType, argTypes, opts) => {
+      return (...args) => ccall(ident, returnType, argTypes, args, opts);
+    };
+
+
+
+  
+  var allocateUTF8 = stringToNewUTF8;
+
+
   var FS_createPath = (...args) => FS.createPath(...args);
 
 
@@ -9614,7 +9909,21 @@ async function createWasm() {
 
   var FS_createDevice = (...args) => FS.createDevice(...args);
 
+
+
+
+
+
+
+
+  function _JS_GetConnectionCount() {
+          return Object.keys(PeerNetworkState.connections).length;
+      }
+
+PeerNetworkState = { peer: null, connections: {}, roomId: null, isHost: false };;
+
   FS.createPreloadedFile = FS_createPreloadedFile;
+  FS.preloadFile = FS_preloadFile;
   FS.staticInit();;
 for (let i = 0; i < 32; ++i) tempFixedLengthArray.push(new Array(i));;
 var miniTempWebGLFloatBuffersStorage = new Float32Array(288);
@@ -9669,17 +9978,30 @@ if (Module['wasmBinary']) wasmBinary = Module['wasmBinary'];
   assert(typeof Module['wasmMemory'] == 'undefined', 'Use of `wasmMemory` detected.  Use -sIMPORTED_MEMORY to define wasmMemory externally');
   assert(typeof Module['INITIAL_MEMORY'] == 'undefined', 'Detected runtime INITIAL_MEMORY setting.  Use -sIMPORTED_MEMORY to define wasmMemory dynamically');
 
+  if (Module['preInit']) {
+    if (typeof Module['preInit'] == 'function') Module['preInit'] = [Module['preInit']];
+    while (Module['preInit'].length > 0) {
+      Module['preInit'].shift()();
+    }
+  }
+  consumedModuleProp('preInit');
 }
 
 // Begin runtime exports
   Module['addRunDependency'] = addRunDependency;
   Module['removeRunDependency'] = removeRunDependency;
-  Module['FS_createPreloadedFile'] = FS_createPreloadedFile;
+  Module['ccall'] = ccall;
+  Module['cwrap'] = cwrap;
+  Module['setValue'] = setValue;
+  Module['getValue'] = getValue;
+  Module['UTF8ToString'] = UTF8ToString;
+  Module['FS_preloadFile'] = FS_preloadFile;
   Module['FS_unlink'] = FS_unlink;
   Module['FS_createPath'] = FS_createPath;
   Module['FS_createDevice'] = FS_createDevice;
   Module['FS_createDataFile'] = FS_createDataFile;
   Module['FS_createLazyFile'] = FS_createLazyFile;
+  Module['allocateUTF8'] = allocateUTF8;
   var missingLibrarySymbols = [
   'writeI53ToI64Clamped',
   'writeI53ToI64Signaling',
@@ -9688,19 +10010,17 @@ if (Module['wasmBinary']) wasmBinary = Module['wasmBinary'];
   'convertI32PairToI53',
   'convertI32PairToI53Checked',
   'convertU32PairToI53',
-  'stackAlloc',
   'getTempRet0',
   'setTempRet0',
   'zeroMemory',
+  'withStackSave',
   'inetPton4',
   'inetNtop4',
   'inetPton6',
   'inetNtop6',
   'readSockaddr',
   'writeSockaddr',
-  'emscriptenLog',
-  'readEmAsmArgs',
-  'listenOnce',
+  'runMainThreadEmAsm',
   'autoResumeAudioContext',
   'getDynCaller',
   'asmjsMangle',
@@ -9713,21 +10033,12 @@ if (Module['wasmBinary']) wasmBinary = Module['wasmBinary'];
   'STACK_ALIGN',
   'POINTER_SIZE',
   'ASSERTIONS',
-  'ccall',
-  'cwrap',
-  'uleb128Encode',
-  'generateFuncType',
   'convertJsFunctionToWasm',
   'getEmptyTableSlot',
   'updateTableMap',
   'getFunctionAddress',
   'addFunction',
   'removeFunction',
-  'reallyNegative',
-  'unSign',
-  'strLen',
-  'reSign',
-  'formatString',
   'intArrayToString',
   'AsciiToString',
   'stringToAscii',
@@ -9737,8 +10048,6 @@ if (Module['wasmBinary']) wasmBinary = Module['wasmBinary'];
   'UTF32ToString',
   'stringToUTF32',
   'lengthBytesUTF32',
-  'stringToUTF8OnStack',
-  'writeArrayToMemory',
   'registerKeyEventCallback',
   'registerWheelEventCallback',
   'registerFocusEventCallback',
@@ -9765,7 +10074,6 @@ if (Module['wasmBinary']) wasmBinary = Module['wasmBinary'];
   'registerVisibilityChangeEventCallback',
   'registerBeforeUnloadEventCallback',
   'fillBatteryEventData',
-  'battery',
   'registerBatteryEventCallback',
   'setCanvasElementSize',
   'getCanvasElementSize',
@@ -9813,14 +10121,8 @@ missingLibrarySymbols.forEach(missingLibrarySymbol)
   'abort',
   'wasmMemory',
   'wasmExports',
-  'HEAPF32',
   'HEAPF64',
   'HEAP8',
-  'HEAPU8',
-  'HEAP16',
-  'HEAPU16',
-  'HEAP32',
-  'HEAPU32',
   'HEAP64',
   'HEAPU64',
   'writeStackCookie',
@@ -9833,6 +10135,7 @@ missingLibrarySymbols.forEach(missingLibrarySymbol)
   'bigintToI53Checked',
   'stackSave',
   'stackRestore',
+  'stackAlloc',
   'ptrToString',
   'exitJS',
   'getHeapMax',
@@ -9846,6 +10149,8 @@ missingLibrarySymbols.forEach(missingLibrarySymbol)
   'timers',
   'warnOnce',
   'readEmAsmArgsArray',
+  'readEmAsmArgs',
+  'runEmAsmFunction',
   'jstoi_q',
   'getExecutableName',
   'dynCallLegacy',
@@ -9860,26 +10165,25 @@ missingLibrarySymbols.forEach(missingLibrarySymbol)
   'alignMemory',
   'mmapAlloc',
   'wasmTable',
+  'getUniqueRunDependency',
   'noExitRuntime',
   'addOnPreRun',
   'addOnExit',
   'addOnPostRun',
-  'sigToWasmTypes',
   'freeTableIndexes',
   'functionsInTableMap',
-  'setValue',
-  'getValue',
   'PATH',
   'PATH_FS',
   'UTF8Decoder',
   'UTF8ArrayToString',
-  'UTF8ToString',
   'stringToUTF8Array',
   'stringToUTF8',
   'lengthBytesUTF8',
   'intArrayFromString',
   'UTF16Decoder',
   'stringToNewUTF8',
+  'stringToUTF8OnStack',
+  'writeArrayToMemory',
   'JSEvents',
   'specialHTMLTargets',
   'maybeCStringToJsString',
@@ -9927,6 +10231,7 @@ missingLibrarySymbols.forEach(missingLibrarySymbol)
   'MONTH_DAYS_LEAP_CUMULATIVE',
   'SYSCALLS',
   'preloadPlugins',
+  'FS_createPreloadedFile',
   'FS_modeStringToFlags',
   'FS_getMode',
   'FS_stdin_getChar_buffer',
@@ -10082,16 +10387,23 @@ missingLibrarySymbols.forEach(missingLibrarySymbol)
   'SDL_gfx',
   'GLFW_Window',
   'GLFW',
-  'allocateUTF8',
   'allocateUTF8OnStack',
   'print',
   'printErr',
   'jstoi_s',
+  'PeerNetworkState',
 ];
 unexportedSymbols.forEach(unexportedRuntimeSymbol);
 
   // End runtime exports
   // Begin JS library exports
+  Module['_JS_BroadcastMessage'] = _JS_BroadcastMessage;
+  Module['_JS_CreateRoom'] = _JS_CreateRoom;
+  Module['_JS_DisconnectPeer'] = _JS_DisconnectPeer;
+  Module['_JS_GetRoomId'] = _JS_GetRoomId;
+  Module['_JS_InitPeerNetwork'] = _JS_InitPeerNetwork;
+  Module['_JS_JoinRoom'] = _JS_JoinRoom;
+  Module['_JS_GetConnectionCount'] = _JS_GetConnectionCount;
   // End JS library exports
 
 // end include: postlibrary.js
@@ -10099,13 +10411,178 @@ unexportedSymbols.forEach(unexportedRuntimeSymbol);
 function checkIncomingModuleAPI() {
   ignoredModuleProp('fetchSettings');
 }
+var ASM_CONSTS = {
+  80245: ($0, $1, $2, $3, $4) => { if (typeof window === 'undefined' || (window.AudioContext || window.webkitAudioContext) === undefined) { return 0; } if (typeof(window.miniaudio) === 'undefined') { window.miniaudio = { referenceCount: 0 }; window.miniaudio.device_type = {}; window.miniaudio.device_type.playback = $0; window.miniaudio.device_type.capture = $1; window.miniaudio.device_type.duplex = $2; window.miniaudio.device_state = {}; window.miniaudio.device_state.stopped = $3; window.miniaudio.device_state.started = $4; miniaudio.devices = []; miniaudio.track_device = function(device) { for (var iDevice = 0; iDevice < miniaudio.devices.length; ++iDevice) { if (miniaudio.devices[iDevice] == null) { miniaudio.devices[iDevice] = device; return iDevice; } } miniaudio.devices.push(device); return miniaudio.devices.length - 1; }; miniaudio.untrack_device_by_index = function(deviceIndex) { miniaudio.devices[deviceIndex] = null; while (miniaudio.devices.length > 0) { if (miniaudio.devices[miniaudio.devices.length-1] == null) { miniaudio.devices.pop(); } else { break; } } }; miniaudio.untrack_device = function(device) { for (var iDevice = 0; iDevice < miniaudio.devices.length; ++iDevice) { if (miniaudio.devices[iDevice] == device) { return miniaudio.untrack_device_by_index(iDevice); } } }; miniaudio.get_device_by_index = function(deviceIndex) { return miniaudio.devices[deviceIndex]; }; miniaudio.unlock_event_types = (function(){ return ['touchend', 'click']; })(); miniaudio.unlock = function() { for(var i = 0; i < miniaudio.devices.length; ++i) { var device = miniaudio.devices[i]; if (device != null && device.webaudio != null && device.state === window.miniaudio.device_state.started) { device.webaudio.resume().then(() => { Module._ma_device__on_notification_unlocked(device.pDevice); }, (error) => {console.error("Failed to resume audiocontext", error); }); } } miniaudio.unlock_event_types.map(function(event_type) { document.removeEventListener(event_type, miniaudio.unlock, true); }); }; miniaudio.unlock_event_types.map(function(event_type) { document.addEventListener(event_type, miniaudio.unlock, true); }); } window.miniaudio.referenceCount += 1; return 1; },  
+ 82403: () => { if (typeof(window.miniaudio) !== 'undefined') { window.miniaudio.referenceCount -= 1; if (window.miniaudio.referenceCount === 0) { delete window.miniaudio; } } },  
+ 82567: () => { return (navigator.mediaDevices !== undefined && navigator.mediaDevices.getUserMedia !== undefined); },  
+ 82671: () => { try { var temp = new (window.AudioContext || window.webkitAudioContext)(); var sampleRate = temp.sampleRate; temp.close(); return sampleRate; } catch(e) { return 0; } },  
+ 82842: ($0, $1, $2, $3, $4, $5) => { var deviceType = $0; var channels = $1; var sampleRate = $2; var bufferSize = $3; var pIntermediaryBuffer = $4; var pDevice = $5; if (typeof(window.miniaudio) === 'undefined') { return -1; } var device = {}; var audioContextOptions = {}; if (deviceType == window.miniaudio.device_type.playback && sampleRate != 0) { audioContextOptions.sampleRate = sampleRate; } device.webaudio = new (window.AudioContext || window.webkitAudioContext)(audioContextOptions); device.webaudio.suspend(); device.state = window.miniaudio.device_state.stopped; var channelCountIn = 0; var channelCountOut = channels; if (deviceType != window.miniaudio.device_type.playback) { channelCountIn = channels; } device.scriptNode = device.webaudio.createScriptProcessor(bufferSize, channelCountIn, channelCountOut); device.scriptNode.onaudioprocess = function(e) { if (device.intermediaryBufferView == null || device.intermediaryBufferView.length == 0) { device.intermediaryBufferView = new Float32Array(Module.HEAPF32.buffer, pIntermediaryBuffer, bufferSize * channels); } if (deviceType == miniaudio.device_type.capture || deviceType == miniaudio.device_type.duplex) { for (var iChannel = 0; iChannel < channels; iChannel += 1) { var inputBuffer = e.inputBuffer.getChannelData(iChannel); var intermediaryBuffer = device.intermediaryBufferView; for (var iFrame = 0; iFrame < bufferSize; iFrame += 1) { intermediaryBuffer[iFrame*channels + iChannel] = inputBuffer[iFrame]; } } _ma_device_process_pcm_frames_capture__webaudio(pDevice, bufferSize, pIntermediaryBuffer); } if (deviceType == miniaudio.device_type.playback || deviceType == miniaudio.device_type.duplex) { _ma_device_process_pcm_frames_playback__webaudio(pDevice, bufferSize, pIntermediaryBuffer); for (var iChannel = 0; iChannel < e.outputBuffer.numberOfChannels; ++iChannel) { var outputBuffer = e.outputBuffer.getChannelData(iChannel); var intermediaryBuffer = device.intermediaryBufferView; for (var iFrame = 0; iFrame < bufferSize; iFrame += 1) { outputBuffer[iFrame] = intermediaryBuffer[iFrame*channels + iChannel]; } } } else { for (var iChannel = 0; iChannel < e.outputBuffer.numberOfChannels; ++iChannel) { e.outputBuffer.getChannelData(iChannel).fill(0.0); } } }; if (deviceType == miniaudio.device_type.capture || deviceType == miniaudio.device_type.duplex) { navigator.mediaDevices.getUserMedia({audio:true, video:false}) .then(function(stream) { device.streamNode = device.webaudio.createMediaStreamSource(stream); device.streamNode.connect(device.scriptNode); device.scriptNode.connect(device.webaudio.destination); }) .catch(function(error) { console.log("Failed to get user media: " + error); }); } if (deviceType == miniaudio.device_type.playback) { device.scriptNode.connect(device.webaudio.destination); } device.pDevice = pDevice; return miniaudio.track_device(device); },  
+ 85670: ($0) => { return miniaudio.get_device_by_index($0).webaudio.sampleRate; },  
+ 85736: ($0) => { var device = miniaudio.get_device_by_index($0); if (device.scriptNode !== undefined) { device.scriptNode.onaudioprocess = function(e) {}; device.scriptNode.disconnect(); device.scriptNode = undefined; } if (device.streamNode !== undefined) { device.streamNode.disconnect(); device.streamNode = undefined; } device.webaudio.close(); device.webaudio = undefined; device.pDevice = undefined; },  
+ 86129: ($0) => { miniaudio.untrack_device_by_index($0); },  
+ 86172: ($0) => { var device = miniaudio.get_device_by_index($0); device.webaudio.resume(); device.state = miniaudio.device_state.started; },  
+ 86297: ($0) => { var device = miniaudio.get_device_by_index($0); device.webaudio.suspend(); device.state = miniaudio.device_state.stopped; }
+};
 function GetWindowInnerWidth() { return window.innerWidth; }
 function GetWindowInnerHeight() { return window.innerHeight; }
+
+// Imports from the Wasm binary.
+var _main = Module['_main'] = makeInvalidEarlyAccess('_main');
+var _OnPeerReady = Module['_OnPeerReady'] = makeInvalidEarlyAccess('_OnPeerReady');
+var _OnPlayerJoined = Module['_OnPlayerJoined'] = makeInvalidEarlyAccess('_OnPlayerJoined');
+var _OnPlayerLeft = Module['_OnPlayerLeft'] = makeInvalidEarlyAccess('_OnPlayerLeft');
+var _OnNetworkMessage = Module['_OnNetworkMessage'] = makeInvalidEarlyAccess('_OnNetworkMessage');
+var _OnHostGameClicked = Module['_OnHostGameClicked'] = makeInvalidEarlyAccess('_OnHostGameClicked');
+var _OnJoinGameClicked = Module['_OnJoinGameClicked'] = makeInvalidEarlyAccess('_OnJoinGameClicked');
+var _OnDisconnectClicked = Module['_OnDisconnectClicked'] = makeInvalidEarlyAccess('_OnDisconnectClicked');
+var _malloc = Module['_malloc'] = makeInvalidEarlyAccess('_malloc');
+var _free = Module['_free'] = makeInvalidEarlyAccess('_free');
+var _fflush = makeInvalidEarlyAccess('_fflush');
+var _ma_device__on_notification_unlocked = Module['_ma_device__on_notification_unlocked'] = makeInvalidEarlyAccess('_ma_device__on_notification_unlocked');
+var _ma_malloc_emscripten = Module['_ma_malloc_emscripten'] = makeInvalidEarlyAccess('_ma_malloc_emscripten');
+var _ma_free_emscripten = Module['_ma_free_emscripten'] = makeInvalidEarlyAccess('_ma_free_emscripten');
+var _ma_device_process_pcm_frames_capture__webaudio = Module['_ma_device_process_pcm_frames_capture__webaudio'] = makeInvalidEarlyAccess('_ma_device_process_pcm_frames_capture__webaudio');
+var _ma_device_process_pcm_frames_playback__webaudio = Module['_ma_device_process_pcm_frames_playback__webaudio'] = makeInvalidEarlyAccess('_ma_device_process_pcm_frames_playback__webaudio');
+var _emscripten_stack_get_end = makeInvalidEarlyAccess('_emscripten_stack_get_end');
+var _emscripten_stack_get_base = makeInvalidEarlyAccess('_emscripten_stack_get_base');
+var _strerror = makeInvalidEarlyAccess('_strerror');
+var _emscripten_stack_init = makeInvalidEarlyAccess('_emscripten_stack_init');
+var _emscripten_stack_get_free = makeInvalidEarlyAccess('_emscripten_stack_get_free');
+var __emscripten_stack_restore = makeInvalidEarlyAccess('__emscripten_stack_restore');
+var __emscripten_stack_alloc = makeInvalidEarlyAccess('__emscripten_stack_alloc');
+var _emscripten_stack_get_current = makeInvalidEarlyAccess('_emscripten_stack_get_current');
+var dynCall_ii = makeInvalidEarlyAccess('dynCall_ii');
+var dynCall_vi = makeInvalidEarlyAccess('dynCall_vi');
+var dynCall_vii = makeInvalidEarlyAccess('dynCall_vii');
+var dynCall_iii = makeInvalidEarlyAccess('dynCall_iii');
+var dynCall_v = makeInvalidEarlyAccess('dynCall_v');
+var dynCall_viii = makeInvalidEarlyAccess('dynCall_viii');
+var dynCall_viiiii = makeInvalidEarlyAccess('dynCall_viiiii');
+var dynCall_viiii = makeInvalidEarlyAccess('dynCall_viiii');
+var dynCall_vidd = makeInvalidEarlyAccess('dynCall_vidd');
+var dynCall_iiii = makeInvalidEarlyAccess('dynCall_iiii');
+var dynCall_iiiii = makeInvalidEarlyAccess('dynCall_iiiii');
+var dynCall_iiiji = makeInvalidEarlyAccess('dynCall_iiiji');
+var dynCall_iiiiiii = makeInvalidEarlyAccess('dynCall_iiiiiii');
+var dynCall_jii = makeInvalidEarlyAccess('dynCall_jii');
+var dynCall_vffff = makeInvalidEarlyAccess('dynCall_vffff');
+var dynCall_vf = makeInvalidEarlyAccess('dynCall_vf');
+var dynCall_viiiiiiii = makeInvalidEarlyAccess('dynCall_viiiiiiii');
+var dynCall_viiiiiiiii = makeInvalidEarlyAccess('dynCall_viiiiiiiii');
+var dynCall_i = makeInvalidEarlyAccess('dynCall_i');
+var dynCall_vff = makeInvalidEarlyAccess('dynCall_vff');
+var dynCall_viiiiiii = makeInvalidEarlyAccess('dynCall_viiiiiii');
+var dynCall_vfi = makeInvalidEarlyAccess('dynCall_vfi');
+var dynCall_viif = makeInvalidEarlyAccess('dynCall_viif');
+var dynCall_vif = makeInvalidEarlyAccess('dynCall_vif');
+var dynCall_viff = makeInvalidEarlyAccess('dynCall_viff');
+var dynCall_vifff = makeInvalidEarlyAccess('dynCall_vifff');
+var dynCall_viffff = makeInvalidEarlyAccess('dynCall_viffff');
+var dynCall_viiiiii = makeInvalidEarlyAccess('dynCall_viiiiii');
+var dynCall_vfff = makeInvalidEarlyAccess('dynCall_vfff');
+var dynCall_jiji = makeInvalidEarlyAccess('dynCall_jiji');
+var dynCall_iidiiii = makeInvalidEarlyAccess('dynCall_iidiiii');
+var dynCall_viijii = makeInvalidEarlyAccess('dynCall_viijii');
+var dynCall_iiiiii = makeInvalidEarlyAccess('dynCall_iiiiii');
+var dynCall_iiiiiiiii = makeInvalidEarlyAccess('dynCall_iiiiiiiii');
+var dynCall_iiiiij = makeInvalidEarlyAccess('dynCall_iiiiij');
+var dynCall_iiiiid = makeInvalidEarlyAccess('dynCall_iiiiid');
+var dynCall_iiiiijj = makeInvalidEarlyAccess('dynCall_iiiiijj');
+var dynCall_iiiiiiii = makeInvalidEarlyAccess('dynCall_iiiiiiii');
+var dynCall_iiiiiijj = makeInvalidEarlyAccess('dynCall_iiiiiijj');
+var _asyncify_start_unwind = makeInvalidEarlyAccess('_asyncify_start_unwind');
+var _asyncify_stop_unwind = makeInvalidEarlyAccess('_asyncify_stop_unwind');
+var _asyncify_start_rewind = makeInvalidEarlyAccess('_asyncify_start_rewind');
+var _asyncify_stop_rewind = makeInvalidEarlyAccess('_asyncify_stop_rewind');
+
+function assignWasmExports(wasmExports) {
+  Module['_main'] = _main = createExportWrapper('main', 2);
+  Module['_OnPeerReady'] = _OnPeerReady = createExportWrapper('OnPeerReady', 1);
+  Module['_OnPlayerJoined'] = _OnPlayerJoined = createExportWrapper('OnPlayerJoined', 1);
+  Module['_OnPlayerLeft'] = _OnPlayerLeft = createExportWrapper('OnPlayerLeft', 1);
+  Module['_OnNetworkMessage'] = _OnNetworkMessage = createExportWrapper('OnNetworkMessage', 1);
+  Module['_OnHostGameClicked'] = _OnHostGameClicked = createExportWrapper('OnHostGameClicked', 0);
+  Module['_OnJoinGameClicked'] = _OnJoinGameClicked = createExportWrapper('OnJoinGameClicked', 1);
+  Module['_OnDisconnectClicked'] = _OnDisconnectClicked = createExportWrapper('OnDisconnectClicked', 0);
+  Module['_malloc'] = _malloc = createExportWrapper('malloc', 1);
+  Module['_free'] = _free = createExportWrapper('free', 1);
+  _fflush = createExportWrapper('fflush', 1);
+  Module['_ma_device__on_notification_unlocked'] = _ma_device__on_notification_unlocked = createExportWrapper('ma_device__on_notification_unlocked', 1);
+  Module['_ma_malloc_emscripten'] = _ma_malloc_emscripten = createExportWrapper('ma_malloc_emscripten', 2);
+  Module['_ma_free_emscripten'] = _ma_free_emscripten = createExportWrapper('ma_free_emscripten', 2);
+  Module['_ma_device_process_pcm_frames_capture__webaudio'] = _ma_device_process_pcm_frames_capture__webaudio = createExportWrapper('ma_device_process_pcm_frames_capture__webaudio', 3);
+  Module['_ma_device_process_pcm_frames_playback__webaudio'] = _ma_device_process_pcm_frames_playback__webaudio = createExportWrapper('ma_device_process_pcm_frames_playback__webaudio', 3);
+  _emscripten_stack_get_end = wasmExports['emscripten_stack_get_end'];
+  _emscripten_stack_get_base = wasmExports['emscripten_stack_get_base'];
+  _strerror = createExportWrapper('strerror', 1);
+  _emscripten_stack_init = wasmExports['emscripten_stack_init'];
+  _emscripten_stack_get_free = wasmExports['emscripten_stack_get_free'];
+  __emscripten_stack_restore = wasmExports['_emscripten_stack_restore'];
+  __emscripten_stack_alloc = wasmExports['_emscripten_stack_alloc'];
+  _emscripten_stack_get_current = wasmExports['emscripten_stack_get_current'];
+  dynCalls['ii'] = dynCall_ii = createExportWrapper('dynCall_ii', 2);
+  dynCalls['vi'] = dynCall_vi = createExportWrapper('dynCall_vi', 2);
+  dynCalls['vii'] = dynCall_vii = createExportWrapper('dynCall_vii', 3);
+  dynCalls['iii'] = dynCall_iii = createExportWrapper('dynCall_iii', 3);
+  dynCalls['v'] = dynCall_v = createExportWrapper('dynCall_v', 1);
+  dynCalls['viii'] = dynCall_viii = createExportWrapper('dynCall_viii', 4);
+  dynCalls['viiiii'] = dynCall_viiiii = createExportWrapper('dynCall_viiiii', 6);
+  dynCalls['viiii'] = dynCall_viiii = createExportWrapper('dynCall_viiii', 5);
+  dynCalls['vidd'] = dynCall_vidd = createExportWrapper('dynCall_vidd', 4);
+  dynCalls['iiii'] = dynCall_iiii = createExportWrapper('dynCall_iiii', 4);
+  dynCalls['iiiii'] = dynCall_iiiii = createExportWrapper('dynCall_iiiii', 5);
+  dynCalls['iiiji'] = dynCall_iiiji = createExportWrapper('dynCall_iiiji', 5);
+  dynCalls['iiiiiii'] = dynCall_iiiiiii = createExportWrapper('dynCall_iiiiiii', 7);
+  dynCalls['jii'] = dynCall_jii = createExportWrapper('dynCall_jii', 3);
+  dynCalls['vffff'] = dynCall_vffff = createExportWrapper('dynCall_vffff', 5);
+  dynCalls['vf'] = dynCall_vf = createExportWrapper('dynCall_vf', 2);
+  dynCalls['viiiiiiii'] = dynCall_viiiiiiii = createExportWrapper('dynCall_viiiiiiii', 9);
+  dynCalls['viiiiiiiii'] = dynCall_viiiiiiiii = createExportWrapper('dynCall_viiiiiiiii', 10);
+  dynCalls['i'] = dynCall_i = createExportWrapper('dynCall_i', 1);
+  dynCalls['vff'] = dynCall_vff = createExportWrapper('dynCall_vff', 3);
+  dynCalls['viiiiiii'] = dynCall_viiiiiii = createExportWrapper('dynCall_viiiiiii', 8);
+  dynCalls['vfi'] = dynCall_vfi = createExportWrapper('dynCall_vfi', 3);
+  dynCalls['viif'] = dynCall_viif = createExportWrapper('dynCall_viif', 4);
+  dynCalls['vif'] = dynCall_vif = createExportWrapper('dynCall_vif', 3);
+  dynCalls['viff'] = dynCall_viff = createExportWrapper('dynCall_viff', 4);
+  dynCalls['vifff'] = dynCall_vifff = createExportWrapper('dynCall_vifff', 5);
+  dynCalls['viffff'] = dynCall_viffff = createExportWrapper('dynCall_viffff', 6);
+  dynCalls['viiiiii'] = dynCall_viiiiii = createExportWrapper('dynCall_viiiiii', 7);
+  dynCalls['vfff'] = dynCall_vfff = createExportWrapper('dynCall_vfff', 4);
+  dynCalls['jiji'] = dynCall_jiji = createExportWrapper('dynCall_jiji', 4);
+  dynCalls['iidiiii'] = dynCall_iidiiii = createExportWrapper('dynCall_iidiiii', 7);
+  dynCalls['viijii'] = dynCall_viijii = createExportWrapper('dynCall_viijii', 6);
+  dynCalls['iiiiii'] = dynCall_iiiiii = createExportWrapper('dynCall_iiiiii', 6);
+  dynCalls['iiiiiiiii'] = dynCall_iiiiiiiii = createExportWrapper('dynCall_iiiiiiiii', 9);
+  dynCalls['iiiiij'] = dynCall_iiiiij = createExportWrapper('dynCall_iiiiij', 6);
+  dynCalls['iiiiid'] = dynCall_iiiiid = createExportWrapper('dynCall_iiiiid', 6);
+  dynCalls['iiiiijj'] = dynCall_iiiiijj = createExportWrapper('dynCall_iiiiijj', 7);
+  dynCalls['iiiiiiii'] = dynCall_iiiiiiii = createExportWrapper('dynCall_iiiiiiii', 8);
+  dynCalls['iiiiiijj'] = dynCall_iiiiiijj = createExportWrapper('dynCall_iiiiiijj', 8);
+  _asyncify_start_unwind = createExportWrapper('asyncify_start_unwind', 1);
+  _asyncify_stop_unwind = createExportWrapper('asyncify_stop_unwind', 0);
+  _asyncify_start_rewind = createExportWrapper('asyncify_start_rewind', 1);
+  _asyncify_stop_rewind = createExportWrapper('asyncify_stop_rewind', 0);
+}
 var wasmImports = {
   /** @export */
   GetWindowInnerHeight,
   /** @export */
   GetWindowInnerWidth,
+  /** @export */
+  JS_BroadcastMessage: _JS_BroadcastMessage,
+  /** @export */
+  JS_CreateRoom: _JS_CreateRoom,
+  /** @export */
+  JS_DisconnectPeer: _JS_DisconnectPeer,
+  /** @export */
+  JS_GetRoomId: _JS_GetRoomId,
+  /** @export */
+  JS_InitPeerNetwork: _JS_InitPeerNetwork,
+  /** @export */
+  JS_JoinRoom: _JS_JoinRoom,
+  /** @export */
+  JS_SendMessageTo: _JS_SendMessageTo,
   /** @export */
   __assert_fail: ___assert_fail,
   /** @export */
@@ -10126,6 +10603,8 @@ var wasmImports = {
   _tzset_js: __tzset_js,
   /** @export */
   clock_time_get: _clock_time_get,
+  /** @export */
+  emscripten_asm_const_int: _emscripten_asm_const_int,
   /** @export */
   emscripten_date_now: _emscripten_date_now,
   /** @export */
@@ -10659,63 +11138,6 @@ var wasmImports = {
   /** @export */
   random_get: _random_get
 };
-var wasmExports;
-createWasm();
-// Imports from the Wasm binary.
-var ___wasm_call_ctors = createExportWrapper('__wasm_call_ctors', 0);
-var _main = Module['_main'] = createExportWrapper('main', 2);
-var _malloc = createExportWrapper('malloc', 1);
-var _free = createExportWrapper('free', 1);
-var _fflush = createExportWrapper('fflush', 1);
-var _emscripten_stack_get_end = () => (_emscripten_stack_get_end = wasmExports['emscripten_stack_get_end'])();
-var _emscripten_stack_get_base = () => (_emscripten_stack_get_base = wasmExports['emscripten_stack_get_base'])();
-var _strerror = createExportWrapper('strerror', 1);
-var _emscripten_stack_init = () => (_emscripten_stack_init = wasmExports['emscripten_stack_init'])();
-var _emscripten_stack_get_free = () => (_emscripten_stack_get_free = wasmExports['emscripten_stack_get_free'])();
-var __emscripten_stack_restore = (a0) => (__emscripten_stack_restore = wasmExports['_emscripten_stack_restore'])(a0);
-var __emscripten_stack_alloc = (a0) => (__emscripten_stack_alloc = wasmExports['_emscripten_stack_alloc'])(a0);
-var _emscripten_stack_get_current = () => (_emscripten_stack_get_current = wasmExports['emscripten_stack_get_current'])();
-var dynCall_ii = Module['dynCall_ii'] = createExportWrapper('dynCall_ii', 2);
-var dynCall_vi = Module['dynCall_vi'] = createExportWrapper('dynCall_vi', 2);
-var dynCall_vii = Module['dynCall_vii'] = createExportWrapper('dynCall_vii', 3);
-var dynCall_iii = Module['dynCall_iii'] = createExportWrapper('dynCall_iii', 3);
-var dynCall_v = Module['dynCall_v'] = createExportWrapper('dynCall_v', 1);
-var dynCall_viii = Module['dynCall_viii'] = createExportWrapper('dynCall_viii', 4);
-var dynCall_viiiii = Module['dynCall_viiiii'] = createExportWrapper('dynCall_viiiii', 6);
-var dynCall_viiii = Module['dynCall_viiii'] = createExportWrapper('dynCall_viiii', 5);
-var dynCall_vidd = Module['dynCall_vidd'] = createExportWrapper('dynCall_vidd', 4);
-var dynCall_iiii = Module['dynCall_iiii'] = createExportWrapper('dynCall_iiii', 4);
-var dynCall_vffff = Module['dynCall_vffff'] = createExportWrapper('dynCall_vffff', 5);
-var dynCall_vf = Module['dynCall_vf'] = createExportWrapper('dynCall_vf', 2);
-var dynCall_viiiiiiii = Module['dynCall_viiiiiiii'] = createExportWrapper('dynCall_viiiiiiii', 9);
-var dynCall_viiiiiiiii = Module['dynCall_viiiiiiiii'] = createExportWrapper('dynCall_viiiiiiiii', 10);
-var dynCall_i = Module['dynCall_i'] = createExportWrapper('dynCall_i', 1);
-var dynCall_vff = Module['dynCall_vff'] = createExportWrapper('dynCall_vff', 3);
-var dynCall_viiiiiii = Module['dynCall_viiiiiii'] = createExportWrapper('dynCall_viiiiiii', 8);
-var dynCall_vfi = Module['dynCall_vfi'] = createExportWrapper('dynCall_vfi', 3);
-var dynCall_viif = Module['dynCall_viif'] = createExportWrapper('dynCall_viif', 4);
-var dynCall_vif = Module['dynCall_vif'] = createExportWrapper('dynCall_vif', 3);
-var dynCall_viff = Module['dynCall_viff'] = createExportWrapper('dynCall_viff', 4);
-var dynCall_vifff = Module['dynCall_vifff'] = createExportWrapper('dynCall_vifff', 5);
-var dynCall_viffff = Module['dynCall_viffff'] = createExportWrapper('dynCall_viffff', 6);
-var dynCall_viiiiii = Module['dynCall_viiiiii'] = createExportWrapper('dynCall_viiiiii', 7);
-var dynCall_vfff = Module['dynCall_vfff'] = createExportWrapper('dynCall_vfff', 4);
-var dynCall_jiji = Module['dynCall_jiji'] = createExportWrapper('dynCall_jiji', 4);
-var dynCall_iidiiii = Module['dynCall_iidiiii'] = createExportWrapper('dynCall_iidiiii', 7);
-var dynCall_viijii = Module['dynCall_viijii'] = createExportWrapper('dynCall_viijii', 6);
-var dynCall_iiiii = Module['dynCall_iiiii'] = createExportWrapper('dynCall_iiiii', 5);
-var dynCall_iiiiii = Module['dynCall_iiiiii'] = createExportWrapper('dynCall_iiiiii', 6);
-var dynCall_iiiiiiiii = Module['dynCall_iiiiiiiii'] = createExportWrapper('dynCall_iiiiiiiii', 9);
-var dynCall_iiiiiii = Module['dynCall_iiiiiii'] = createExportWrapper('dynCall_iiiiiii', 7);
-var dynCall_iiiiij = Module['dynCall_iiiiij'] = createExportWrapper('dynCall_iiiiij', 6);
-var dynCall_iiiiid = Module['dynCall_iiiiid'] = createExportWrapper('dynCall_iiiiid', 6);
-var dynCall_iiiiijj = Module['dynCall_iiiiijj'] = createExportWrapper('dynCall_iiiiijj', 7);
-var dynCall_iiiiiiii = Module['dynCall_iiiiiiii'] = createExportWrapper('dynCall_iiiiiiii', 8);
-var dynCall_iiiiiijj = Module['dynCall_iiiiiijj'] = createExportWrapper('dynCall_iiiiiijj', 8);
-var _asyncify_start_unwind = createExportWrapper('asyncify_start_unwind', 1);
-var _asyncify_stop_unwind = createExportWrapper('asyncify_stop_unwind', 0);
-var _asyncify_start_rewind = createExportWrapper('asyncify_start_rewind', 1);
-var _asyncify_stop_rewind = createExportWrapper('asyncify_stop_rewind', 0);
 
 
 // include: postamble.js
@@ -10844,17 +11266,12 @@ function checkUnflushedContent() {
   }
 }
 
-function preInit() {
-  if (Module['preInit']) {
-    if (typeof Module['preInit'] == 'function') Module['preInit'] = [Module['preInit']];
-    while (Module['preInit'].length > 0) {
-      Module['preInit'].shift()();
-    }
-  }
-  consumedModuleProp('preInit');
-}
+var wasmExports;
 
-preInit();
+// With async instantation wasmExports is assigned asynchronously when the
+// instance is received.
+createWasm();
+
 run();
 
 // end include: postamble.js

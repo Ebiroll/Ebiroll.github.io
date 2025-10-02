@@ -3,173 +3,277 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Robban Planterar</title>
+    <title>Robban Planterar - Multiplayer</title>
     <style>
         body {
             margin: 0;
-            padding: 20px;
-            background: linear-gradient(135deg, #2d5a27, #4a7c59);
-            font-family: 'Courier New', monospace;
-            color: white;
+            padding: 0;
+            background-color: #1a1a1a;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #ffffff;
             display: flex;
             flex-direction: column;
             align-items: center;
+            justify-content: center;
             min-height: 100vh;
         }
         
-        .game-container {
-            background: rgba(0, 0, 0, 0.3);
-            border-radius: 10px;
+        #game-container {
+            text-align: center;
+            max-width: 1400px;
+            width: 100%;
             padding: 20px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
         }
         
         h1 {
-            text-align: center;
-            color: #90EE90;
-            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+            color: #4CAF50;
             margin-bottom: 10px;
-            font-size: 2.5em;
         }
         
-        .subtitle {
-            text-align: center;
-            color: #B8E6B8;
+        #multiplayer-controls {
+            background: #2a2a2a;
+            border-radius: 10px;
+            padding: 20px;
             margin-bottom: 20px;
-            font-style: italic;
-        }
-        
-        canvas {
-            display: block;
-            margin: 0 auto;
-            border: 3px solid #4a7c59;
-            border-radius: 5px;
-            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-        }
-        
-        .controls {
-            margin-top: 20px;
-            text-align: center;
-            background: rgba(0, 0, 0, 0.2);
-            padding: 15px;
-            border-radius: 8px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-        
-        .controls h3 {
-            color: #90EE90;
-            margin-top: 0;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
         }
         
         .control-group {
-            display: inline-block;
-            margin: 0 15px;
-            text-align: left;
+            margin: 15px 0;
         }
         
-        .control-item {
-            margin: 5px 0;
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #aaa;
         }
         
-        .key {
-            background: #4a7c59;
-            padding: 2px 6px;
-            border-radius: 3px;
+        input[type="text"] {
+            width: 300px;
+            padding: 10px;
+            border: 2px solid #444;
+            border-radius: 5px;
+            background: #333;
+            color: #fff;
+            font-size: 14px;
+        }
+        
+        button {
+            padding: 12px 24px;
+            margin: 5px;
+            border: none;
+            border-radius: 5px;
+            font-size: 14px;
             font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        }
+        
+        .host-btn {
+            background: #4CAF50;
             color: white;
         }
         
-        .status {
-            text-align: center;
-            margin-top: 15px;
-            font-size: 14px;
-            color: #B8E6B8;
+        .host-btn:hover {
+            background: #45a049;
         }
         
-        .loading {
-            text-align: center;
-            color: #90EE90;
-            font-size: 18px;
+        .join-btn {
+            background: #2196F3;
+            color: white;
         }
         
-        .spinner {
-            border: 3px solid rgba(255, 255, 255, 0.3);
-            border-radius: 50%;
-            border-top: 3px solid #90EE90;
-            width: 30px;
-            height: 30px;
-            animation: spin 1s linear infinite;
-            margin: 10px auto;
+        .join-btn:hover {
+            background: #0b7dda;
         }
         
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+        .disconnect-btn {
+            background: #f44336;
+            color: white;
         }
         
-        .error {
-            color: #ff6b6b;
-            background: rgba(255, 107, 107, 0.1);
-            padding: 10px;
+        .disconnect-btn:hover {
+            background: #da190b;
+        }
+        
+        #room-info {
+            background: #1a3a1a;
+            border: 2px solid #4CAF50;
             border-radius: 5px;
-            border: 1px solid rgba(255, 107, 107, 0.3);
+            padding: 15px;
+            margin-top: 15px;
+            display: none;
+        }
+        
+        #room-info.active {
+            display: block;
+        }
+        
+        #room-id-display {
+            font-size: 18px;
+            font-weight: bold;
+            color: #4CAF50;
+            margin: 10px 0;
+            word-break: break-all;
+        }
+        
+        .info-text {
+            color: #aaa;
+            font-size: 12px;
             margin-top: 10px;
         }
         
-        @media (max-width: 768px) {
-            .game-container {
-                padding: 10px;
-                margin: 10px;
-            }
-            
-            h1 {
-                font-size: 2em;
-            }
-            
-            .control-group {
-                display: block;
-                margin: 10px 0;
-            }
+        .canvas-container {
+            position: relative;
+            display: inline-block;
+        }
+        
+        canvas {
+            border: 3px solid #4CAF50;
+            border-radius: 5px;
+            background-color: #000;
+        }
+        
+        #status {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: #4CAF50;
+            animation: spin 1s ease-in-out infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
         }
     </style>
 </head>
 <body>
-    <div class="game-container">
-        <h1>🌲 Robban Planterar 🌲</h1>
-        <p class="subtitle">Multiplayer Tree Planting Adventure</p>
+    <div id="game-container">
+        <h1>🌳 Robban Planterar - Multiplayer 🌳</h1>
         
-        <div id="loading" class="loading">
-            <div class="spinner"></div>
-            <p>Loading game...</p>
+        <div id="multiplayer-controls">
+            <h3>Multiplayer Setup</h3>
+            
+            <div class="control-group">
+                <button class="host-btn" onclick="hostGame()">🎮 Host Game</button>
+                <span style="margin: 0 10px;">or</span>
+                <button class="join-btn" onclick="showJoinInput()">🔗 Join Game</button>
+            </div>
+            
+            <div id="join-input" style="display: none;">
+                <div class="control-group">
+                    <label for="room-id-input">Enter Room ID:</label>
+                    <input type="text" id="room-id-input" placeholder="Paste Room ID here">
+                    <button class="join-btn" onclick="joinGame()">Join</button>
+                    <button onclick="hideJoinInput()">Cancel</button>
+                </div>
+            </div>
+            
+            <div id="room-info">
+                <div>🎮 <strong>Room Status:</strong> <span id="connection-status">Connecting...</span></div>
+                <div><strong>Room ID:</strong></div>
+                <div id="room-id-display">Generating...</div>
+                <div class="info-text">Share this Room ID with friends to play together!</div>
+                <button class="disconnect-btn" onclick="disconnectGame()" style="margin-top: 10px;">Disconnect</button>
+            </div>
         </div>
         
-        <canvas id="canvas" style="display: none;" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
-        
-        <div class="controls">
-            <h3>🎮 Controls</h3>
-            <div class="control-group">
-                <div class="control-item"><span class="key">WASD</span> or <span class="key">↑↓←→</span> Move</div>
-                <div class="control-item"><span class="key">SPACE</span> Action</div>
-                <div class="control-item"><span class="key">P</span> Switch Mode</div>
-            </div>
-            <div class="control-group">
-                <div class="control-item"><span class="key">H</span> Host Game</div>
-                <div class="control-item"><span class="key">J</span> Join Game</div>
-            </div>
+        <div class="canvas-container">
+            <canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
         </div>
         
-        <div class="status" id="status">
-            🌱 Plant trees, 🔫 shoot bullets in movement direction, 🪓 harvest for points!
+        <div id="status">Loading game...</div>
+        
+        <div class="info-text" style="margin-top: 20px;">
+            Controls: WASD/Arrows to move | SPACE for action | P to switch mode
         </div>
     </div>
 
-    <script type='text/javascript'>
-        var statusElement = document.getElementById('status');
-        var loadingElement = document.getElementById('loading');
-        var canvas = document.getElementById('canvas');
+    <!-- PeerJS Library -->
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    
+    <!-- Emscripten game code will be inserted here -->
+    <script async type="text/javascript" src="robban_planterar.js"></script>
+    
+    <script>
+        // Multiplayer UI Functions
+        function hostGame() {
+            console.log('[UI] Hosting game...');
+            document.getElementById('room-info').classList.add('active');
+            document.getElementById('connection-status').textContent = 'Hosting...';
+            
+            // Trigger host in C++ code
+            if (Module._OnHostGameClicked) {
+                Module._OnHostGameClicked();
+            }
+            
+            // The room ID will be updated by the OnPeerReady callback
+        }
         
+        function showJoinInput() {
+            document.getElementById('join-input').style.display = 'block';
+        }
+        
+        function hideJoinInput() {
+            document.getElementById('join-input').style.display = 'none';
+            document.getElementById('room-id-input').value = '';
+        }
+        
+        function updateRoomId(roomId) {
+            document.getElementById('room-id-display').textContent = roomId;
+            document.getElementById('connection-status').textContent = 'Active - Waiting for players';
+        }
+
+        function joinGame() {
+            var roomId = document.getElementById('room-id-input').value.trim();
+            if (!roomId) {
+                alert('Please enter a Room ID');
+                return;
+            }
+            
+            console.log('[UI] Joining game:', roomId);
+            document.getElementById('room-info').classList.add('active');
+            document.getElementById('connection-status').textContent = 'Connecting...';
+            document.getElementById('room-id-display').textContent = roomId;
+            hideJoinInput();
+            
+            // Trigger join in C++ code
+            if (Module._OnJoinGameClicked) {
+                var roomIdPtr = Module.allocateUTF8(roomId);
+                Module._OnJoinGameClicked(roomIdPtr);
+                Module._free(roomIdPtr);
+            }
+            
+            setTimeout(function() {
+                document.getElementById('connection-status').textContent = 'Connected';
+            }, 1000);
+        }
+        
+        function disconnectGame() {
+            console.log('[UI] Disconnecting...');
+            document.getElementById('room-info').classList.remove('active');
+            document.getElementById('connection-status').textContent = 'Disconnected';
+            
+            if (Module._OnDisconnectClicked) {
+                Module._OnDisconnectClicked();
+            }
+        }
+        
+        // Update status messages
         var Module = {
             preRun: [],
             postRun: [],
@@ -177,32 +281,21 @@
                 console.log('[Game]', text);
             },
             printErr: function(text) {
-                console.error('[Game Error]', text);
-                if (text.includes('Error') || text.includes('error')) {
-                    statusElement.innerHTML = '<div class="error">⚠️ ' + text + '</div>';
-                }
+                console.error('[Game]', text);
             },
-            canvas: (function() {
-                return canvas;
-            })(),
+            canvas: document.getElementById('canvas'),
             setStatus: function(text) {
-                if (!Module.setStatus.last) Module.setStatus.last = { time: Date.now(), text: '' };
-                if (text === Module.setStatus.last.text) return;
-                
-                var m = text.match(/([^(]+)\((\d+(\.\d+)?)\/(\d+)\)/);
-                var now = Date.now();
-                
-                if (m && now - Module.setStatus.last.time < 30) return; // if this is a progress update, skip it if too soon
-                Module.setStatus.last.time = now;
-                Module.setStatus.last.text = text;
-                
+                var statusElement = document.getElementById('status');
                 if (text) {
-                    console.log('[Status]', text);
                     statusElement.textContent = text;
+                    if (text.includes('Exception') || text.includes('Error')) {
+                        statusElement.style.color = '#f44336';
+                    } else {
+                        statusElement.style.color = '#4CAF50';
+                    }
                 } else {
-                    loadingElement.style.display = 'none';
-                    canvas.style.display = 'block';
-                    statusElement.innerHTML = '🎮 Game loaded! Start planting trees!';
+                    statusElement.textContent = 'Game running...';
+                    statusElement.style.color = '#4CAF50';
                 }
             },
             totalDependencies: 0,
@@ -215,31 +308,7 @@
         Module.setStatus('Downloading...');
         window.onerror = function() {
             Module.setStatus('Exception thrown, see JavaScript console');
-            loadingElement.style.display = 'none';
-            statusElement.innerHTML = '<div class="error">❌ Failed to load game. Check browser console for details.</div>';
         };
-        
-        // Focus canvas for keyboard input
-        canvas.addEventListener('click', function() {
-            canvas.focus();
-        });
-        
-        // Prevent zoom on mobile
-        document.addEventListener('touchstart', function(e) {
-            if (e.touches.length > 1) {
-                e.preventDefault();
-            }
-        });
-        
-        // Game-specific event handlers
-        document.addEventListener('keydown', function(e) {
-            // Prevent default browser shortcuts that might interfere
-            if (['KeyH', 'KeyJ', 'KeyP', 'Space'].includes(e.code)) {
-                e.preventDefault();
-            }
-        });
     </script>
-    
-    <script async type="text/javascript" src="robban_planterar.js"></script>
 </body>
 </html>
