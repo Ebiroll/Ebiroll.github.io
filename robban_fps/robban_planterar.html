@@ -55,7 +55,18 @@
             border-radius: 5px;
             background: #333;
             color: #fff;
-            font-size: 14px;
+            font-size: 16px; /* Prevents zoom on iOS */
+            -webkit-appearance: none; /* Better styling on iOS */
+            appearance: none;
+            touch-action: manipulation; /* Prevent double-tap zoom */
+            position: relative;
+            z-index: 100; /* Ensure inputs are above canvas */
+        }
+        
+        input[type="text"]:focus {
+            border-color: #4CAF50;
+            outline: none;
+            box-shadow: 0 0 5px rgba(76, 175, 80, 0.5);
         }
         
         button {
@@ -67,6 +78,7 @@
             font-weight: bold;
             cursor: pointer;
             transition: all 0.3s;
+            touch-action: manipulation; /* Prevent double-tap zoom */
         }
         
         button:hover {
@@ -159,6 +171,51 @@
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
+        
+        /* Responsive: better mobile layout */
+        @media (max-width: 900px), (hover: none) and (pointer: coarse) {
+            #multiplayer-controls {
+                padding: 10px;
+            }
+            
+            #multiplayer-controls h3 {
+                font-size: 16px;
+                margin: 5px 0;
+            }
+            
+            .control-group {
+                margin: 8px 0;
+            }
+            
+            input[type="text"] {
+                width: 200px;
+                padding: 8px;
+                font-size: 12px;
+            }
+            
+            button {
+                padding: 8px 16px;
+                font-size: 12px;
+            }
+            
+            h1 {
+                font-size: 1.2em;
+                margin: 5px 0;
+            }
+            
+            .info-text {
+                display: none;
+            }
+            
+            #game-container {
+                padding: 5px;
+            }
+            
+            canvas {
+                max-width: 100vw;
+                max-height: 70vh;
+            }
+        }
     </style>
 </head>
 <body>
@@ -200,6 +257,8 @@
         <div class="canvas-container">
             <canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
         </div>
+        
+        <!-- Mobile touch controls are now rendered by raylib in C++ -->
         
         <div id="status">Loading game...</div>
         
@@ -465,6 +524,53 @@
                 console.log('Generated random username:', usernameInput.value);
             }
         });
+
+        // ** PREVENT SPACEBAR FROM SCROLLING THE PAGE **
+        // This prevents the default browser behavior of scrolling when pressing spacebar
+        // while still allowing the game to receive the key events
+        window.addEventListener('keydown', function(e) {
+            // Prevent spacebar from scrolling when not in an input field
+            if (e.code === 'Space' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+                e.preventDefault();
+            }
+            // Also prevent arrow keys from scrolling
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code) && 
+                e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+                e.preventDefault();
+            }
+        }, { passive: false });
+
+        // Touch controls are now handled by raylib in the C++ code
+        // This section only prevents default touch behaviors that could interfere with the game
+        document.addEventListener('touchmove', function(e) {
+            // Prevent scrolling on the canvas only
+            if (e.target.tagName === 'CANVAS') {
+                e.preventDefault();
+            }
+        }, { passive: false });
+        
+        // Ensure input fields can receive focus on mobile
+        document.querySelectorAll('input[type="text"]').forEach(function(input) {
+            // Make inputs more touch-friendly
+            input.addEventListener('touchstart', function(e) {
+                e.stopPropagation(); // Don't let touch events bubble to canvas
+                this.focus();
+            }, { passive: true });
+            
+            input.addEventListener('click', function(e) {
+                e.stopPropagation();
+                this.focus();
+                this.select(); // Select all text for easy editing
+            });
+        });
+        
+        // Prevent canvas from stealing focus when inputs are active
+        document.getElementById('canvas').addEventListener('touchstart', function(e) {
+            // If an input is focused, don't let canvas steal focus
+            if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') {
+                return;
+            }
+        }, { passive: true });
 
     </script>
 <script async type="text/javascript" src="robban_planterar.js"></script>
