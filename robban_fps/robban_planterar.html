@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Robban Planterar - Multiplayer</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #1a1a1a;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #ffffff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+        
+        #game-container {
+            text-align: center;
+            max-width: 1400px;
+            width: 100%;
+            padding: 20px;
+        }
+        
+        h1 {
+            color: #4CAF50;
+            margin-bottom: 10px;
+        }
+        
+        #multiplayer-controls {
+            background: #2a2a2a;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        
+        .control-group {
+            margin: 15px 0;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #aaa;
+        }
+        
+        input[type="text"] {
+            width: 300px;
+            padding: 10px;
+            border: 2px solid #444;
+            border-radius: 5px;
+            background: #333;
+            color: #fff;
+            font-size: 14px;
+        }
+        
+        button {
+            padding: 12px 24px;
+            margin: 5px;
+            border: none;
+            border-radius: 5px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        }
+        
+        .host-btn {
+            background: #4CAF50;
+            color: white;
+        }
+        
+        .host-btn:hover {
+            background: #45a049;
+        }
+        
+        .join-btn {
+            background: #2196F3;
+            color: white;
+        }
+        
+        .join-btn:hover {
+            background: #0b7dda;
+        }
+        
+        .disconnect-btn {
+            background: #f44336;
+            color: white;
+        }
+        
+        .disconnect-btn:hover {
+            background: #da190b;
+        }
+        
+        #room-info {
+            background: #1a3a1a;
+            border: 2px solid #4CAF50;
+            border-radius: 5px;
+            padding: 15px;
+            margin-top: 15px;
+            display: none;
+        }
+        
+        #room-info.active {
+            display: block;
+        }
+        
+        #room-id-display {
+            font-size: 18px;
+            font-weight: bold;
+            color: #4CAF50;
+            margin: 10px 0;
+            word-break: break-all;
+        }
+        
+        .info-text {
+            color: #aaa;
+            font-size: 12px;
+            margin-top: 10px;
+        }
+        
+        .canvas-container {
+            position: relative;
+            display: inline-block;
+        }
+        
+        canvas {
+            border: 3px solid #4CAF50;
+            border-radius: 5px;
+            background-color: #000;
+        }
+        
+        #status {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: #4CAF50;
+            animation: spin 1s ease-in-out infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <h1>🌳 Robban Planterar - Multiplayer 🌳</h1>
+        
+        <div id="multiplayer-controls">
+            <h3>Multiplayer Setup</h3>
+            
+            <div class="control-group">
+                <label for="username-input">Username:</label>
+                <input type="text" id="username-input" placeholder="Enter your username" value="">
+            </div>
+            
+            <div class="control-group">
+                <button class="host-btn" onclick="hostGame()">🎮 Host Game</button>
+                <span style="margin: 0 10px;">or</span>
+                <button class="join-btn" onclick="showJoinInput()">🔗 Join Game</button>
+            </div>
+            
+            <div id="join-input" style="display: none;">
+                <div class="control-group">
+                    <label for="room-id-input">Enter Room ID:</label>
+                    <input type="text" id="room-id-input" placeholder="Paste Room ID here">
+                    <button class="join-btn" onclick="joinGame()">Join</button>
+                    <button onclick="hideJoinInput()">Cancel</button>
+                </div>
+            </div>
+            
+            <div id="room-info">
+                <div>🎮 <strong>Room Status:</strong> <span id="connection-status">Connecting...</span></div>
+                <div><strong>Room ID:</strong></div>
+                <div id="room-id-display">Generating...</div>
+                <div class="info-text">Share this Room ID with friends to play together!</div>
+                <button class="disconnect-btn" onclick="disconnectGame()" style="margin-top: 10px;">Disconnect</button>
+            </div>
+        </div>
+        
+        <div class="canvas-container">
+            <canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
+        </div>
+        
+        <div id="status">Loading game...</div>
+        
+        <div class="info-text" style="margin-top: 20px;">
+            Controls: WASD/Arrows to move | SPACE for action | P to switch mode
+        </div>
+    </div>
+
+    <!-- PeerJS Library -->
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    
+    <!-- Emscripten game code will be inserted here -->
+    
+    
+    <script>
+        // Multiplayer UI Functions
+        function hostGame() {
+            console.log('[UI] Hosting game...');
+            var username = document.getElementById('username-input').value;
+            
+            // Try to set username if the function is available
+            try {
+                if (Module.cwrap && Module._setUsername) {
+                    Module.ccall('setUsername', null, ['string'], [username]);
+                    console.log('[UI] Username set to:', username);
+                } else {
+                    console.warn('[UI] setUsername not available yet, using default');
+                }
+            } catch(e) {
+                console.warn('[UI] Error setting username:', e);
+            }
+            
+            document.getElementById('room-info').classList.add('active');
+            document.getElementById('connection-status').textContent = 'Hosting...';
+            
+            // Trigger host in C++ code
+            if (Module._OnHostGameClicked) {
+                Module._OnHostGameClicked();
+            }
+            
+            // The room ID will be updated by the OnPeerReady callback
+        }
+        
+        function showJoinInput() {
+            document.getElementById('join-input').style.display = 'block';
+        }
+        
+        function hideJoinInput() {
+            document.getElementById('join-input').style.display = 'none';
+            document.getElementById('room-id-input').value = '';
+        }
+        
+        function updateRoomId(roomId) {
+            console.log('[UI] updateRoomId called with:', roomId);
+            document.getElementById('room-id-display').textContent = roomId;
+            document.getElementById('connection-status').textContent = 'Active - Waiting for players';
+            
+            // Also update URL if not already set
+            const params = new URLSearchParams(window.location.search);
+            if (!params.get('roomId')) {
+                params.set('roomId', roomId);
+                window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
+            }
+        }
+        
+        // Expose updateRoomId globally so C++ can call it
+        window.updateRoomId = updateRoomId;
+
+        function joinGame() {
+            var roomId = document.getElementById('room-id-input').value.trim();
+            if (!roomId) {
+                alert('Please enter a Room ID');
+                return;
+            }
+            
+            var username = document.getElementById('username-input').value;
+            
+            console.log('[UI] Joining game:', roomId, 'with username:', username);
+            document.getElementById('room-info').classList.add('active');
+            document.getElementById('connection-status').textContent = 'Connecting...';
+            document.getElementById('room-id-display').textContent = roomId;
+            hideJoinInput();
+
+            // FIRST: Set username
+            try {
+                if (Module.cwrap && Module._setUsername) {
+                    Module.ccall('setUsername', null, ['string'], [username]);
+                    console.log('[UI] Username set to:', username);
+                } else {
+                    console.warn('[UI] setUsername not available yet, using default');
+                }
+            } catch(e) {
+                console.warn('[UI] Error setting username:', e);
+            }
+
+            // SECOND: Prepare join state BEFORE calling OnJoinGameClicked
+            if (Module._PrepareJoinRoom) {
+                var prepRoomIdPtr = Module.allocateUTF8(roomId);
+                Module._PrepareJoinRoom(prepRoomIdPtr);
+                Module._free(prepRoomIdPtr);
+            }
+
+            // THIRD: Trigger join in C++ code
+            if (Module._OnJoinGameClicked) {
+                var roomIdPtr = Module.allocateUTF8(roomId);
+                Module._OnJoinGameClicked(roomIdPtr);
+                Module._free(roomIdPtr);
+            }
+
+            setTimeout(function() {
+                document.getElementById('connection-status').textContent = 'Connected';
+            }, 1000);
+        }
+        
+        // ** NEW HELPER FUNCTION TO REPORT STATUS **
+        // This function should be called from your C++ code.
+        window._ReportStatusToDashboard = function(jsonStatus) {
+            // The API endpoint URL. Using a relative path ensures it always
+            // points to the same server that is hosting the game, whether
+            // it's localhost:3000 or your production domain.
+            const apiUrl = '/api/server/status';
+
+            console.log('[Dashboard] Reporting status via _ReportStatusToDashboard:', jsonStatus);
+
+            fetch(apiUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: jsonStatus, // jsonStatus is already a JSON string from C++
+            })
+            .then(response => {
+                if (!response.ok) {
+                    console.error(`[Dashboard] API request failed with status: ${response.status} (${response.statusText})`);
+                    return response.text().then(text => { throw new Error(text || 'Service Unavailable') });
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('[Dashboard] API response:', data);
+            })
+            .catch(error => {
+                console.error('[Dashboard] Failed to report status:', error);
+            });
+        }
+
+        function disconnectGame() {
+            console.log('[UI] Disconnecting...');
+            document.getElementById('room-info').classList.remove('active');
+            document.getElementById('connection-status').textContent = 'Disconnected';
+            
+            if (Module._OnDisconnectClicked) {
+                Module._OnDisconnectClicked();
+            }
+        }
+        
+        // Update status messages
+        var Module = {
+            preRun: [function() {
+                // Check URL parameters BEFORE runtime starts
+                const params = new URLSearchParams(window.location.search);
+                const roomId = params.get('roomId');
+                const username = params.get('username');
+                
+                if (roomId) {
+                    console.log('[Game] PreRun: Preparing to join room:', roomId);
+                    // This tells C++ we're joining, not hosting
+                    window._joiningRoom = roomId;
+                }
+                
+                if (username) {
+                    console.log('[Game] PreRun: Username from URL:', username);
+                    // Store username to set after runtime init
+                    window._pendingUsername = username;
+                }
+            }],
+            postRun: [],
+            print: function(text) {
+                console.log('[Game]', text);
+            },
+            printErr: function(text) {
+                console.error('[Game]', text);
+            },
+            canvas: document.getElementById('canvas'),
+            setStatus: function(text) {
+                var statusElement = document.getElementById('status');
+                if (text) {
+                    statusElement.textContent = text;
+                    if (text.includes('Exception') || text.includes('Error')) {
+                        statusElement.style.color = '#f44336';
+                    } else {
+                        statusElement.style.color = '#4CAF50';
+                    }
+                } else {
+                    statusElement.textContent = 'Game running...';
+                    statusElement.style.color = '#4CAF50';
+                }
+            },
+            totalDependencies: 0,
+            monitorRunDependencies: function(left) {
+                this.totalDependencies = Math.max(this.totalDependencies, left);
+                Module.setStatus(left ? 'Preparing... (' + (this.totalDependencies-left) + '/' + this.totalDependencies + ')' : 'All downloads complete.');
+            },
+            onRuntimeInitialized: function() {
+                console.log('[Game] Runtime initialized');
+
+                // Check for auto-join parameters after module is ready
+                const params = new URLSearchParams(window.location.search);
+                const roomId = params.get('roomId');
+                const username = params.get('username') || window._pendingUsername;
+
+                // Set username from URL if provided - DO THIS FIRST
+                if (username) {
+                    document.getElementById('username-input').value = username;
+                    console.log('[Game] Username from URL:', username);
+                    
+                    // Set username in C++ immediately
+                    try {
+                        if (Module.cwrap && Module._setUsername) {
+                            Module.ccall('setUsername', null, ['string'], [username]);
+                            console.log('[Game] Username set in C++ on init:', username);
+                        }
+                    } catch(e) {
+                        console.warn('[Game] Error setting username on init:', e);
+                    }
+                }
+
+                if (roomId) {
+                    console.log('[Game] Auto-joining room:', roomId);
+                    setTimeout(() => {
+                        document.getElementById('room-id-input').value = roomId;
+                        joinGame();
+                    }, 500); // Small delay to ensure everything is ready
+                } else {
+                    // No roomId - auto-host a new game
+                    console.log('[Game] No roomId in URL - auto-hosting game');
+                    setTimeout(() => {
+                        hostGame();
+                    }, 500);
+                }
+            }
+        };
+        
+        Module.setStatus('Downloading...');
+        window.onerror = function() {
+            Module.setStatus('Exception thrown, see JavaScript console');
+        };
+
+        // ** USERNAME INITIALIZATION **
+        document.addEventListener('DOMContentLoaded', () => {
+            const params = new URLSearchParams(window.location.search);
+            const username = params.get('username');
+
+            // Generate a random username if none provided
+            const usernameInput = document.getElementById('username-input');
+            if (username) {
+                console.log('Username found in URL:', username);
+                usernameInput.value = username;
+            } else if (!usernameInput.value) {
+                // Generate random username like "Player_1234"
+                const randomNum = Math.floor(Math.random() * 10000);
+                usernameInput.value = 'Player_' + randomNum;
+                console.log('Generated random username:', usernameInput.value);
+            }
+        });
+
+    </script>
+<script async type="text/javascript" src="robban_planterar.js"></script>
+</body>
+</html>
